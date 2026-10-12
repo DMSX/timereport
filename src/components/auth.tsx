@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { browserClient } from "@/lib/supabase/browser";
+import { encodeQrImage } from "@/lib/qr";
 
 export default function Auth() {
   const router = useRouter();
@@ -40,7 +41,7 @@ export default function Auth() {
       }
       const { data: enrollment, error: enrollmentError } = await db.auth.mfa.enroll({ factorType: "totp", friendlyName: "TimeReport" });
       if (enrollmentError) throw enrollmentError;
-      setFactor(enrollment.id); setQr(enrollment.totp.qr_code); setSecret(enrollment.totp.secret); setStep("enroll");
+      setFactor(enrollment.id); setQr(encodeQrImage(enrollment.totp.qr_code)); setSecret(enrollment.totp.secret); setStep("enroll");
     }
   }, [db, router]);
   useEffect(() => {
