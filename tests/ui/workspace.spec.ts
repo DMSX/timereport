@@ -279,3 +279,59 @@ test("managers can retry failed delivery, remind once and clarify with a reason"
   await expect(page.getByText("Mit Begründung geklärt",{exact:true})).toBeVisible();
   await expect(page.getByText("Nachtrag mit Person vereinbart.",{exact:true})).toBeVisible();
 });
+
+test("monthly report provides day details, project allocation and month navigation",async({page})=>{
+  await workspace(page,"employee",true,false,false,true,true);
+  await page.route("https://ui-fixture.supabase.co/rest/v1/time_entries?**",route=>route.fulfill({json:[
+    {id:"report-block",company_id:"company",user_id:"test-user",project_id:"project",
+      started_at:"2026-10-05T23:30:00+02:00",ended_at:"2026-10-06T01:00:00+02:00",
+      note:"Besprechung und Umsetzung",max_work_minutes:120,min_break_minutes:15},
+  ]}));
+  await page.reload();
+  await page.getByRole("link",{name:"Monatsrapport",exact:true}).click();
+  await page.getByLabel("Monat",{exact:true}).fill("2026-10");
+  const report=page.locator(".report-workspace");
+  await expect(report.getByRole("heading",{name:"Oktober 2026",exact:true})).toBeVisible();
+  await expect(report.locator(".report-primary-metric")).toContainText("1:30");
+  await report.getByRole("checkbox",{name:"Nur Tage mit Erfassung oder Abwesenheit"}).check();
+  await expect(report.getByText("2 von 31 Tagen",{exact:true})).toBeVisible();
+  const day=report.getByRole("button",{name:/06.*Okt/});
+  await day.click();
+  await expect(day).toHaveAttribute("aria-expanded","true");
+  await expect(report.getByText("1:00 h an diesem Tag",{exact:true})).toBeVisible();
+  await expect(report.getByText("Besprechung und Umsetzung",{exact:true})).toBeVisible();
+  await report.getByRole("button",{name:"Nach Projekten",exact:true}).click();
+  await expect(report.locator(".report-project-row")).toContainText("Website Relaunch");
+  await expect(report.locator(".report-project-value")).toContainText("1:30 h");
+  await expect(report.getByRole("link",{name:"CSV herunterladen"})).toHaveAttribute("href",/month=2026-10/);
+  await report.getByRole("button",{name:"Nächster Monat"}).click();
+  await expect(report.getByRole("heading",{name:"November 2026",exact:true})).toBeVisible();
+  await expect(report.getByRole("heading",{name:"Noch keine Projektstunden in diesem Monat."})).toBeVisible();
+  await expect(report.getByRole("link",{name:"PDF herunterladen"})).toHaveAttribute("href",/month=2026-11/);
+  await report.getByRole("button",{name:"Vorheriger Monat"}).click();
+  await report.getByRole("button",{name:"Tagesübersicht",exact:true}).click();
+  await expect(report.getByText("2 von 31 Tagen",{exact:true})).toBeVisible();
+  await page.setViewportSize({width:390,height:844});
+  await expect(report.getByRole("link",{name:"PDF herunterladen"})).toBeVisible();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  await page.screenshot({path:test.info().outputPath("monthly-report-mobile.png"),fullPage:true});
+});
+
+test("scheduled report retains whole-month targets and shows pending absence without credit",async({page})=>{
+  await workspace(page,"employee",true);
+  await page.route("https://ui-fixture.supabase.co/rest/v1/absences?**",route=>route.fulfill({json:[
+    {id:"pending",company_id:"company",user_id:"test-user",kind:"vacation",starts_on:"2026-10-05",ends_on:"2026-10-05",fraction:1,status:"pending"},
+  ]}));
+  await page.reload();
+  await page.getByRole("link",{name:"Monatsrapport",exact:true}).click();
+  const report=page.locator(".report-workspace");
+  await report.getByLabel("Monat",{exact:true}).fill("2026-10");
+  await expect(report.getByRole("columnheader",{name:"Soll",exact:true})).toBeVisible();
+  await expect(report.getByRole("columnheader",{name:"Saldo",exact:true})).toBeVisible();
+  await report.getByRole("checkbox",{name:"Nur Tage mit Erfassung oder Abwesenheit"}).check();
+  await expect(report.getByText("1 von 31 Tagen",{exact:true})).toBeVisible();
+  await expect(report.getByText("Freigabe offen",{exact:true})).toBeVisible();
+  await expect(report.locator(".report-metrics")).toContainText("176:00");
+  await expect(report.locator(".report-metrics")).toContainText("-176:00");
+  await page.screenshot({path:test.info().outputPath("monthly-report-desktop.png"),fullPage:true});
+});

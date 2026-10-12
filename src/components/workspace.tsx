@@ -6,7 +6,7 @@ export const sections = {
   time: { title: "Mein Arbeitstag", description: "Deine Zeit im Blick. Ein Projekt wählen und loslegen.", group: "Arbeitsplatz" },
   history: { title: "Zeitbuchungen", description: "Arbeitsblöcke prüfen, nachtragen und korrigieren.", group: "Arbeitsplatz" },
   absences: { title: "Abwesenheiten", description: "Ferien planen, Krankheit erfassen und Anträge verfolgen.", group: "Arbeitsplatz" },
-  report: { title: "Monatsrapport", description: "Arbeitszeit, Soll und Abwesenheiten in einem Auszug.", group: "Arbeitsplatz" },
+  report: { title: "Monatsrapport", description: "Dein Monat auf einen Blick. Tagesdetails, Projekte und Auszüge.", group: "Arbeitsplatz" },
   notifications: { title: "Hinweise", description: "Fehlende Zeiterfassung prüfen, erinnern und nachvollziehbar klären.", group: "Arbeitsplatz" },
   team: { title: "Team", description: "Menschen, Rollen und Arbeitsmodelle übersichtlich verwalten.", group: "Verwaltung" },
   projects: { title: "Projekte", description: "Projekte organisieren und Mitarbeitende zuweisen.", group: "Verwaltung" },

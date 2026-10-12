@@ -144,6 +144,17 @@ Firmenabo) und Betreiberbereich. Bereiche bleiben über den URL-Hash nach
 Neuladen erhalten; Browser-Zurück/Vorwärts wechselt den Bereich mit.
 Auf Mobilgeräten ist die Navigation horizontal scrollbar.
 
+Der **Monatsrapport** hat eine eigene Monatsnavigation mit Vor/Zurück und
+**Dieser Monat**, Kennzahlen sowie direkten PDF-/CSV-Downloads. In der
+**Tagesübersicht** lassen sich Arbeitsblöcke mit Zeiten, Notizen und anteiliger
+Tagesdauer aufklappen. **Nach Projekten** zeigt Stunden und Anteil je Projekt
+für den ausgewählten Monat, einschliesslich historischer Projekte.
+Ein Filter blendet Tage ohne Buchung oder Abwesenheit aus; offene
+Abwesenheiten bleiben sichtbar, erzeugen aber keine Gutschrift.
+Ansichtswechsel und Filter verändern weder Kennzahlen noch Exportumfang.
+Stundenbasis zeigt keine Soll-/Saldo-Spalten; laufende Zeiten sind ausdrücklich
+vorläufig. Rechenhinweise stehen in einem aufklappbaren Bereich.
+
 Manuelle Nachträge und Korrekturen liegen unter **Zeitbuchungen**; neue
 Abwesenheiten, Einladungen, Projekte und Firmen öffnen sich in Dialogen mit
 Fokusführung und Escape zum Schliessen. Fehler bleiben im Dialog sichtbar,

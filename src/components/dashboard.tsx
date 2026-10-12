@@ -14,6 +14,7 @@ import WorkSchedule from "./work-schedule";
 import FirstRun, { type WizardStep } from "./first-run";
 import ReportCenter from "./report-center";
 import ReportRuleForm from "./report-rule-form";
+import MonthlyReport from "./monthly-report";
 
 type Data = {
   companies: Company[]; members: Member[]; projects: Project[]; entries: Entry[];
@@ -178,7 +179,6 @@ export default function Dashboard() {
   const ownEntries = data.entries.filter((e) => e.user_id === userId);
   const ownViolations = breakViolations(ownEntries, now);
   const report = /^\d{4}-\d{2}$/.test(month) ? monthlyReport(month, entries, models, absences, now) : [];
-  const total = report.reduce((sum, d) => ({ worked: sum.worked + d.worked, target: sum.target + d.target, credited: sum.credited + d.vacation + d.sick, balance: sum.balance + d.balance }), { worked: 0, target: 0, credited: 0, balance: 0 });
   const sub = data.subscriptions.find((s) => s.company_id === companyId);
   const range = monthRange(month);
   const visibleEntries = entries.filter((e) => localTime(e.started_at) < range.end && localTime(e.ended_at ?? now.toISO()!) > range.start);
@@ -191,7 +191,6 @@ export default function Dashboard() {
   const current = allowed.includes(tab) ? tab : allowed[0] ?? "time";
   const today = now.toISODate()!;
   const currentModel = (id: string) => modelForDay(data.models.filter((m) => m.user_id === id), today);
-  const hasReportTarget = report.some((d) => d.hasTarget);
   const showReportAbsences = company?.absence_tracking || absences.length > 0;
   const hourlyPerson = currentModel(selectedPerson)?.mode === "hourly";
   const ownModels = data.models.filter((m) => m.user_id === userId);
@@ -497,18 +496,10 @@ export default function Dashboard() {
         }} />
       </>}
 
-      {ownMember && current === "report" && <>
-        <div className="section-heading"><h2>Monatsrapport · {person?.display_name}</h2><label>Monat<input type="month" value={month} min="2000-01" max="2100-12" onChange={(e) => { if (e.target.value) setMonth(e.target.value); }} /></label></div>
-        {report.some((d) => d.mode === null) && <p className="notice error">Für einzelne Tage fehlt ein Zeiterfassungsmodell. Für diese Tage werden weder Soll noch Saldo berechnet.</p>}
-        <div className="tiles">
-          {[["Arbeitszeit", total.worked], ...(hasReportTarget ? [["Sollzeit", total.target], ...(showReportAbsences ? [["Abwesenheitsgutschrift", total.credited]] : []), ["Saldo (nur Soll-Tage)", total.balance]] : [])].map(([label, value]) => <section className="card" key={label}><span className="eyebrow">{label}</span><h2>{minutesLabel(Number(value))} h</h2></section>)}
-        </div>
-        <p className="muted">Stundenbasis hat kein Soll und keinen Saldo. Bei einem Modellwechsel gilt die Auswahl ab dem Gültigkeitsdatum. Abwesenheitstage werden dokumentiert; Stundengutschriften nur auf Soll-Tagen. {hasReportTarget && "Der Saldo berücksichtigt alle Soll-Tage des Monats, auch zukünftige. Feiertage werden nicht automatisch abgezogen."} Laufende Buchungen sind vorläufig.</p>
-        <div className="actions">{["pdf", "csv"].map((format) => <a className="button" key={format} href={`/api/report?company=${companyId}&user=${selectedPerson}&month=${month}&format=${format}`}>{format.toUpperCase()} herunterladen</a>)}</div>
-        <div className="table-wrap"><table><thead><tr><th>Datum</th><th>Arbeit</th>{hasReportTarget && <><th>Soll</th>{showReportAbsences && <th>Gutschrift Ferien / Krankheit (h)</th>}<th>Saldo</th></>}{showReportAbsences && <><th>Ferien (Tage)</th><th>Krankheit (Tage)</th></>}</tr></thead><tbody>
-          {report.map((d) => <tr key={d.date}><td>{DateTime.fromISO(d.date).toFormat("dd.MM.yyyy")}</td><td>{minutesLabel(d.worked)}</td>{hasReportTarget && <><td>{d.hasTarget ? minutesLabel(d.target) : "—"}</td>{showReportAbsences && <td>{d.hasTarget ? `${minutesLabel(d.vacation)} / ${minutesLabel(d.sick)}` : "—"}</td>}<td>{d.hasTarget ? minutesLabel(d.balance) : "—"}</td></>}{showReportAbsences && <><td>{d.vacationDays || "—"}</td><td>{d.sickDays || "—"}</td></>}</tr>)}
-        </tbody></table></div>
-      </>}
+      {ownMember && current === "report" && <MonthlyReport key={selectedPerson} month={month} onMonth={setMonth}
+        name={person?.display_name ?? ownMember.display_name} companyName={company?.name ?? ""} companyId={companyId}
+        userId={selectedPerson} report={report} entries={entries} projects={data.projects} absences={absences}
+        showAbsences={!!showReportAbsences} now={now} />}
 
       {manager && current === "team" && <>
         <div className="collection-toolbar"><span>{data.members.length} Personen im Team</span><label>Team durchsuchen<input type="search" placeholder="Name suchen …" value={search} onChange={(e) => setSearch(e.target.value)} /></label></div>
