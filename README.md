@@ -84,6 +84,28 @@ Nachweisführung verbindlich festzulegen.
 
 ## Arbeitsregeln
 
+### Oberfläche und Einstieg
+
+Nach dem Login öffnet sich **Mein Arbeitstag** mit eigener Tageszeit,
+Tagessoll, Wochenzeit bis heute und Ein-/Auschecken. Neue Firmen-Admins sehen
+eine Einrichtungshilfe: Arbeitsmodelle hinterlegen, Projekt erstellen und
+Team zuweisen. Betreiber ohne Firma erhalten einen eigenen Einstieg zur
+Firmenaufnahme, statt einer leeren Zeiterfassung.
+
+Die Seitennavigation trennt Arbeitsplatz (Arbeitstag, Zeitbuchungen,
+Abwesenheiten, Monatsrapport), Verwaltung (Team, Projekte, Firmenregeln,
+Firmenabo) und Betreiberbereich. Bereiche bleiben über den URL-Hash nach
+Neuladen erhalten; Browser-Zurück/Vorwärts wechselt den Bereich mit.
+Auf Mobilgeräten ist die Navigation horizontal scrollbar.
+
+Manuelle Nachträge und Korrekturen liegen unter **Zeitbuchungen**; neue
+Abwesenheiten, Einladungen, Projekte und Firmen öffnen sich in Dialogen mit
+Fokusführung und Escape zum Schliessen. Fehler bleiben im Dialog sichtbar,
+ohne eingegebene Werte zu verlieren. Team- und Projektlisten sind durchsuchbar;
+Bearbeitungsformulare werden nur bei Bedarf aufgeklappt. Arbeitsmodelle werden
+in Stunden eingegeben und zeigen das Wochen-Soll live an; die Datenbank
+speichert weiterhin volle Minuten.
+
 | Bereich | Verhalten |
 | --- | --- |
 | Firmen | Datenzugriff nur mit Firmenmitgliedschaft und `aal2` (bestätigter zweiter Faktor). |
@@ -156,6 +178,19 @@ npm run typecheck
 npm run lint
 npm run build
 ```
+
+Browserprüfungen mit vollständig isolierten Beispieldaten:
+
+```powershell
+npx playwright install chromium
+npm run test:ui
+```
+
+Die UI-Tests starten einen eigenen Entwicklungsserver auf Port 3190.
+Vorher einen laufenden `next dev`-Prozess dieses Projekts beenden, da Next.js
+dasselbe Build-Verzeichnis sperrt. Die Tests verwenden weder echte Benutzer
+noch Cloud-Daten und prüfen Einstieg, Rollen-Navigation, Ein-/Auschecken,
+Dialoge, Fehleranzeige sowie mobile Darstellung.
 
 Die Tests führen die echte SQL-Migration in eingebettetem PostgreSQL (PGlite)
 aus und prüfen Mandantengrenzen, 2FA, direkte Schreibverbote, Korrekturen und

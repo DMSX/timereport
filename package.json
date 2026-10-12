@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
-    "test": "tsx --test tests/*.test.ts"
+    "test": "tsx --test tests/*.test.ts",
+    "test:ui": "playwright test"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
@@ -22,6 +23,7 @@
     "zod": "^4.6.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.0",
     "@electric-sql/pglite": "^0.3.14",
     "@types/luxon": "^3.7.6",
     "@types/node": "^20",
