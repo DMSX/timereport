@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Dashboard from "@/components/dashboard";
+import { Suspense } from "react";
 
 export default function Home() {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
@@ -24,5 +25,5 @@ export default function Home() {
       </div>
     </main>;
   }
-  return <Dashboard />;
+  return <Suspense fallback={<main className="loading-state" role="status">Dein Arbeitsplatz wird geladen …</main>}><Dashboard /></Suspense>;
 }

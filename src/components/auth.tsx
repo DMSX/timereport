@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { browserClient } from "@/lib/supabase/browser";
@@ -70,10 +71,17 @@ export default function Auth() {
   }
 
   const verifiedSetup = passwordSetup && aal2;
-  return <main className="auth card">
-    <span className="eyebrow">TimeReport</span>
-    <h1>{verifiedSetup ? "Passwort festlegen" : step === "password" ? "Willkommen zurück." : "Sicher anmelden."}</h1>
-    <p>Zugang nur auf Einladung. Authenticator-2FA ist für alle verpflichtend.</p>
+  return <main className="auth-layout">
+    <section className="auth-story">
+      <div><Link className="brand" href="/"><span className="brand-mark">T</span>TimeReport<span className="brand-country">CH</span></Link></div>
+      <div><span className="eyebrow">Mehr Klarheit. Weniger Aufwand.</span><h2>Dein Team.<br />Deine Projekte.<br />Deine Zeit.</h2><p>Vom ersten Einchecken bis zum Monatsrapport. Ein Arbeitsplatz, der deinen Alltag einfacher macht.</p><div className="auth-features"><span>Projektbezogen</span><span>Für Schweizer Teams</span><span>Sicher getrennt</span></div></div>
+      <small>Arbeitszeiten im Blick. Firmendaten geschützt.</small>
+    </section>
+    <section className="auth-panel"><div className="auth">
+    <div className="auth-steps" aria-label="Anmeldeschritte"><span className={step === "password" || step === "loading" ? "current" : ""}>1 · Anmelden</span><span className={!verifiedSetup && (step === "enroll" || step === "verify") ? "current" : ""}>2 · Bestätigen</span>{passwordSetup && <span className={verifiedSetup ? "current" : ""}>3 · Passwort</span>}</div>
+    <span className="eyebrow">{step === "enroll" ? "Einmalige Einrichtung" : "Dein Arbeitsplatz wartet"}</span>
+    <h1>{verifiedSetup ? "Passwort festlegen" : step === "password" || step === "loading" ? "Willkommen zurück." : step === "enroll" ? "Zugang absichern." : "Kurz bestätigen."}</h1>
+    <p>{verifiedSetup ? "Wähle ein persönliches Passwort mit mindestens zwölf Zeichen." : step === "enroll" ? "Verbinde deine Authenticator-App. Damit bleiben deine Firmendaten geschützt." : step === "verify" ? "Öffne deine Authenticator-App und gib den aktuellen Code für TimeReport ein." : "Melde dich mit deiner Firmen-E-Mail an. Neue Zugänge erhältst du auf Einladung."}</p>
     {message && <p role="alert" className="notice error">{message}</p>}
     {verifiedSetup ? <form onSubmit={async (e) => {
       e.preventDefault(); setBusy(true);
@@ -90,7 +98,7 @@ export default function Auth() {
         </> : <>
           {step === "enroll" && <>
             <p>Scanne den QR-Code mit deiner Authenticator-App und gib den sechsstelligen Code ein.</p>
-            <Image src={qr} width={240} height={240} alt="QR-Code für Authenticator-Einrichtung" unoptimized />
+            <div className="qr-frame"><Image src={qr} width={220} height={220} alt="QR-Code für Authenticator-Einrichtung" unoptimized /></div>
             <details><summary>Manueller Einrichtungsschlüssel</summary><code className="secret">{secret}</code></details>
           </>}
           <label>Authenticator-Code<input name="code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required autoComplete="one-time-code" /></label>
@@ -103,5 +111,6 @@ export default function Auth() {
       else { setSignedIn(false); setAal2(false); setStep("password"); setQr(""); setSecret(""); router.replace("/login"); router.refresh(); }
     }}>Abmelden</button>}
     <p className="muted">Passwort oder Authenticator verloren? Kontaktiere deinen Firmen-Admin. Ein 2FA-Reset erfolgt nur nach Identitätsprüfung.</p>
+    </div></section>
   </main>;
 }
