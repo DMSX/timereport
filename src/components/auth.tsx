@@ -19,6 +19,7 @@ export default function Auth() {
   const [passwordSetup, setPasswordSetup] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
   const [aal2, setAal2] = useState(false);
+  const [code, setCode] = useState("");
   const initialized = useRef(false);
   const prepare = useCallback(async () => {
     const { data, error } = await db.auth.getUser();
@@ -54,15 +55,20 @@ export default function Auth() {
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setMessage("");
-    const data = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const data = new FormData(form);
     try {
       if (step === "password") {
         const { error } = await db.auth.signInWithPassword({ email: String(data.get("email")), password: String(data.get("password")) });
         if (error) throw error;
+        form.reset();
+        setCode("");
         await prepare();
       } else {
-        const { error } = await db.auth.mfa.challengeAndVerify({ factorId: factor, code: String(data.get("code")).trim() });
+        if (!/^[0-9]{6}$/.test(code)) throw new Error("Bitte den sechsstelligen Authenticator-Code eingeben.");
+        const { error } = await db.auth.mfa.challengeAndVerify({ factorId: factor, code });
         if (error) throw error;
+        setCode("");
         if (passwordSetup) { setAal2(true); setQr(""); setSecret(""); }
         else { router.replace("/"); router.refresh(); }
       }
@@ -83,32 +89,39 @@ export default function Auth() {
     <h1>{verifiedSetup ? "Passwort festlegen" : step === "password" || step === "loading" ? "Willkommen zurück." : step === "enroll" ? "Zugang absichern." : "Kurz bestätigen."}</h1>
     <p>{verifiedSetup ? "Wähle ein persönliches Passwort mit mindestens zwölf Zeichen." : step === "enroll" ? "Verbinde deine Authenticator-App. Damit bleiben deine Firmendaten geschützt." : step === "verify" ? "Öffne deine Authenticator-App und gib den aktuellen Code für TimeReport ein." : "Melde dich mit deiner Firmen-E-Mail an. Neue Zugänge erhältst du auf Einladung."}</p>
     {message && <p role="alert" className="notice error">{message}</p>}
-    {verifiedSetup ? <form onSubmit={async (e) => {
+    {verifiedSetup ? <form key="new-password" onSubmit={async (e) => {
       e.preventDefault(); setBusy(true);
-      const password = String(new FormData(e.currentTarget).get("newPassword"));
-      const { error } = await db.auth.updateUser({ password });
-      setBusy(false);
-      if (error) setMessage(error.message); else { router.replace("/"); router.refresh(); }
-    }}><label>Neues Passwort<input name="newPassword" type="password" minLength={12} required autoComplete="new-password" /></label><button disabled={busy}>Passwort speichern</button></form>
+      const form = e.currentTarget;
+      try {
+        const password = String(new FormData(form).get("newPassword"));
+        const { error } = await db.auth.updateUser({ password });
+        if (error) throw error;
+        form.reset(); router.replace("/"); router.refresh();
+      } catch (error) { setMessage(error instanceof Error ? error.message : "Passwort konnte nicht gespeichert werden."); }
+      finally { setBusy(false); }
+    }}><label htmlFor="auth-new-password">Neues Passwort</label><input id="auth-new-password" name="newPassword" type="password" minLength={12} required autoComplete="new-password" disabled={busy} /><button disabled={busy}>Passwort speichern</button></form>
       : step === "loading" ? <p>Login wird geladen …</p>
-      : <form onSubmit={submit}>
+      : <form key={step === "password" ? "password-login" : `totp-${step}`} onSubmit={submit}>
         {step === "password" ? <>
-          <label>E-Mail<input name="email" type="email" required autoComplete="email" /></label>
-          <label>Passwort<input name="password" type="password" required autoComplete="current-password" /></label>
+          <label htmlFor="auth-email">E-Mail</label><input id="auth-email" name="email" type="email" required autoComplete="username" disabled={busy} />
+          <label htmlFor="auth-password">Passwort</label><input id="auth-password" name="password" type="password" required autoComplete="current-password" disabled={busy} />
         </> : <>
           {step === "enroll" && <>
             <p>Scanne den QR-Code mit deiner Authenticator-App und gib den sechsstelligen Code ein.</p>
             <div className="qr-frame"><Image src={qr} width={220} height={220} alt="QR-Code für Authenticator-Einrichtung" unoptimized /></div>
             <details><summary>Manueller Einrichtungsschlüssel</summary><code className="secret">{secret}</code></details>
           </>}
-          <label>Authenticator-Code<input name="code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required autoComplete="one-time-code" /></label>
+          <label htmlFor="auth-totp-code">Authenticator-Code</label><input id="auth-totp-code" name="totp-code" type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required autoComplete="one-time-code" disabled={busy} value={code} onChange={(event) => {
+            const value = event.target.value;
+            setCode(/^[0-9]{0,6}$/.test(value) ? value : "");
+          }} />
         </>}
         <button disabled={busy}>{busy ? "Bitte warten …" : step === "password" ? "Anmelden" : "Code bestätigen"}</button>
       </form>}
-    {signedIn && <button className="secondary" onClick={async () => {
+    {signedIn && <button className="secondary" disabled={busy} onClick={async () => {
       const { error } = await db.auth.signOut();
       if (error) setMessage(error.message);
-      else { setSignedIn(false); setAal2(false); setStep("password"); setQr(""); setSecret(""); router.replace("/login"); router.refresh(); }
+      else { setSignedIn(false); setAal2(false); setStep("password"); setQr(""); setSecret(""); setCode(""); router.replace("/login"); router.refresh(); }
     }}>Abmelden</button>}
     <p className="muted">Passwort oder Authenticator verloren? Kontaktiere deinen Firmen-Admin. Ein 2FA-Reset erfolgt nur nach Identitätsprüfung.</p>
     </div></section>

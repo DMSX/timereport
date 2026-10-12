@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import type { Database } from "../types";
+import { secureSupabaseUrl } from "./url";
 
 export function requiredEnv(name: string) {
   const value = process.env[name];
@@ -13,7 +14,7 @@ export function requiredEnv(name: string) {
 export async function serverClient() {
   const store = await cookies();
   return createServerClient<Database>(
-    requiredEnv("NEXT_PUBLIC_SUPABASE_URL"),
+    secureSupabaseUrl(requiredEnv("NEXT_PUBLIC_SUPABASE_URL")),
     requiredEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
     { cookies: {
       getAll: () => store.getAll(),
@@ -23,7 +24,7 @@ export async function serverClient() {
 }
 
 export function serviceClient() {
-  return createClient<Database>(requiredEnv("NEXT_PUBLIC_SUPABASE_URL"), requiredEnv("SUPABASE_SERVICE_ROLE_KEY"), {
+  return createClient<Database>(secureSupabaseUrl(requiredEnv("NEXT_PUBLIC_SUPABASE_URL")), requiredEnv("SUPABASE_SERVICE_ROLE_KEY"), {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
