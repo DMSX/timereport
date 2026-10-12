@@ -203,6 +203,30 @@ zusätzliche Konfiguration als verbindlicher Schichtplan interpretiert.
 
 Diese Funktion ist eine neue Produktetappe und noch nicht implementiert.
 
+**Bestätigte Produktentscheidungen (12. Oktober 2026):**
+
+- Auslöser ist ausschliesslich: am vorgesehenen Arbeitstag bis zur Prüffrist
+  überhaupt keine Zeitbuchung. Ein Vormittagsblock verhindert diesen Hinweis;
+  eine gesonderte Prüfung auf fehlende Nachmittagsbuchungen ist nicht enthalten.
+- Die Prüffrist wird je Person relativ zum geplanten Arbeitsbeginn
+  konfiguriert. Die konkrete Dauer wird in der Einrichtung festgelegt.
+  Ohne gültigen Arbeitsbeginn oder konfigurierte Frist erfolgt keine
+  spekulative Fehlmeldung; die fehlende Konfiguration muss sichtbar sein.
+- Je Mitarbeitendem wird eine zuständige Person innerhalb der Firma
+  hinterlegt. Deren Zugriff auf notwendige Hinweise und Zeitdaten muss
+  ausdrücklich durch die Rollen-/Berechtigungsregeln gedeckt sein.
+- Verantwortliche erhalten Hinweise in der Anwendung und per E-Mail.
+  Erinnerungen an Mitarbeitende werden von ihnen manuell ausgelöst;
+  es gibt zunächst keine automatische Eskalation.
+- Liegt eine passende, noch offene Abwesenheit vor, lautet der Hinweis
+  „Abwesenheit zur Prüfung offen“ statt „Zeiterfassung fehlt“.
+  Halbtagsfälle müssen dem betroffenen Arbeitszeitfenster zugeordnet werden;
+  das bisherige Datenmodell unterscheidet noch nicht Vormittag/Nachmittag.
+- Erkennung und Hinweiszustellung laufen serverseitig. Der konkrete
+  Ausführungsrhythmus, Zustellkanal der manuellen Erinnerung, Wiederholungen
+  und erforderliche Erweiterungen für Teilabwesenheiten sind vor der
+  technischen Umsetzung noch festzulegen.
+
 ## 6. Benutzerführung
 
 | Schritt | Ablauf |
