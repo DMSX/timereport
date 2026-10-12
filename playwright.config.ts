@@ -11,6 +11,7 @@ export default defineConfig({
     env: {
       NEXT_PUBLIC_SUPABASE_URL: "https://ui-fixture.supabase.co",
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "ui-test-publishable-key",
+      CRON_SECRET: "isolated-ui-scheduler-test",
     },
   },
 });

@@ -24,6 +24,7 @@ test("PostgreSQL migration and tenant/write boundaries", async (t) => {
       grant execute on all functions in schema auth to authenticated;
     `);
     await db.exec(await readFile(new URL("../supabase/migrations/202610120001_initial.sql", import.meta.url), "utf8"));
+    await db.exec(await readFile(new URL("../supabase/migrations/202610120002_onboarding_alerts.sql", import.meta.url), "utf8"));
     await db.exec(`
       insert into auth.users values ('${admin}'),('${employee}'),('${outsider}'),('${operator}');
       insert into public.companies(id,name) values ('${company}','Pilot'),('${otherCompany}','Other');

@@ -1,7 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
+import type { ReportAlert, EmailJob } from "../../src/lib/types";
 
 // Network-isolated fixtures: these tests must never read or mutate cloud data.
-async function workspace(page: Page, role: "admin" | "employee" | "operator" = "admin", ready = false) {
+async function workspace(page: Page, role: "admin" | "employee" | "operator" = "admin", ready = false, firstRun = false, withAlert = false) {
   const claims = { sub: "test-user", aal: "aal2", exp: Math.floor(Date.now() / 1000) + 3600, amr: [{ method: "password", timestamp: 1 }, { method: "totp", timestamp: 2 }] };
   const token = `e30.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.test`;
   await page.context().addCookies([{
@@ -16,9 +17,45 @@ async function workspace(page: Page, role: "admin" | "employee" | "operator" = "
   const member = { company_id: "company", user_id: "test-user", display_name: "Alex Beispiel", role, vacation_days: 25 };
   const project = { id: "project", company_id: "company", name: "Website Relaunch", active: true, max_work_minutes: null, min_break_minutes: null };
   let running: object[] = [];
+  let progress = firstRun ? [] : [{ user_id: "test-user", scope: role === "operator" ? "operator" : "company", step: 0, completed: true }];
+  let absences: object[] = [];
+  let alerts: ReportAlert[] = withAlert ? [{
+    id: "alert", company_id: "company", user_id: "test-user", responsible_id: "test-user",
+    work_day: "2020-01-02", due_at: "2020-01-02T09:00:00Z", kind: "missing", status: "open",
+    resolution: null, resolved_by: null, reminded_at: null,
+    created_at: "2020-01-02T09:00:00Z", updated_at: "2020-01-02T09:00:00Z",
+  }] : [];
+  let jobs: EmailJob[] = withAlert ? [{
+    id: "job", alert_id: "alert", company_id: "company", recipient_id: "test-user", purpose: "responsible",
+    kind: "missing", status: "failed", attempts: 5, next_attempt_at: "2020-01-02T09:00:00Z",
+    lease_token: null, lease_until: null, last_error: "SMTP-Konfiguration prüfen.", sent_at: null,
+  }] : [];
   await page.route("https://ui-fixture.supabase.co/**", async (route) => {
     const url = new URL(route.request().url());
     const resource = url.pathname.split("/").at(-1);
+    if (resource === "onboarding_progress" && route.request().method() === "POST") {
+      progress = [route.request().postDataJSON()];
+      await route.fulfill({ json: progress }); return;
+    }
+    if (resource === "retry_report_email") {
+      jobs = jobs.map((job) => ({ ...job, status: "pending", attempts: 0, last_error: null }));
+      await route.fulfill({ json: null }); return;
+    }
+    if (resource === "handle_report_alert") {
+      const input = route.request().postDataJSON();
+      if (input.p_action === "remind") {
+        alerts = alerts.map((alert) => ({ ...alert, reminded_at: new Date().toISOString() }));
+      } else {
+        alerts = alerts.map((alert) => ({ ...alert, status: "clarified", resolution: input.p_reason }));
+      }
+      await route.fulfill({ json: null }); return;
+    }
+    if (url.pathname.includes("/rpc/request_absence")) {
+      const input = route.request().postDataJSON();
+      absences = [{ id: "absence", company_id: "company", user_id: "test-user", kind: input.p_kind,
+        starts_on: input.p_start, ends_on: input.p_end, fraction: input.p_fraction, day_part: input.p_part, status: "pending" }];
+      await route.fulfill({ json: "absence" }); return;
+    }
     if (url.pathname.includes("/auth/")) {
       await route.fulfill({ json: { id: "test-user", email: "test@example.invalid", factors: [{ id: "f", factor_type: "totp", status: "verified" }] } }); return;
     }
@@ -37,7 +74,9 @@ async function workspace(page: Page, role: "admin" | "employee" | "operator" = "
       projects: ready ? [project] : [],
       project_members: ready ? [{ project_id: "project", user_id: "test-user", company_id: "company" }] : [],
       work_models: ready ? [{ id: "model", company_id: "company", user_id: "test-user", valid_from: "2020-01-01", weekday_minutes: [480, 480, 480, 480, 480, 0, 0], planned_start: null, planned_end: null }] : [],
-      time_entries: running, absences: [], break_resolutions: [],
+      time_entries: running, absences, break_resolutions: [],
+      report_settings: [], report_alerts: alerts, email_outbox: jobs, company_holidays: [],
+      onboarding_progress: progress, scheduler_status: [{ id: 1, last_checked_at: null }],
     };
     const values = rows[resource ?? ""] ?? [];
     const singular = route.request().headers()["accept"]?.includes("vnd.pgrst.object");
@@ -121,4 +160,55 @@ test("failed invitations keep input and show the error inside the dialog", async
   await expect(dialog.getByLabel("Name", { exact: true })).toHaveValue("Neue Person");
   await dialog.getByRole("button", { name: "Dialog schliessen" }).click();
   await expect(page.getByRole("main").getByRole("alert")).toHaveText("Test: Einladung nicht versendet.");
+});
+
+test("first-run wizard resumes saved progress and blocks missing prerequisites", async ({ page }) => {
+  await workspace(page, "admin", false, true);
+  const wizard = page.getByRole("region", { name: "Einrichtungsassistent" });
+  await expect(wizard.getByRole("heading", { name: "Willkommen in deinem Arbeitsplatz" })).toBeVisible();
+  await wizard.getByRole("button", { name: "Weiter", exact: true }).click();
+  await expect(wizard.getByRole("heading", { name: "Firmenregeln festlegen" })).toBeVisible();
+  await page.reload();
+  await expect(wizard.getByRole("heading", { name: "Firmenregeln festlegen" })).toBeVisible();
+  await wizard.getByRole("button", { name: "Verstanden / Weiter" }).click();
+  await expect(wizard.getByRole("button", { name: "Voraussetzung noch offen" })).toBeDisabled();
+  await wizard.getByRole("button", { name: "Diesen Schritt öffnen" }).click();
+  await expect(page.getByRole("heading", { name: "Team", exact: true })).toBeVisible();
+});
+
+test("half-day requests carry their time window and appear in the absence list", async({page})=>{
+  await workspace(page,"employee",true);
+  await page.getByRole("link",{name:"Abwesenheiten",exact:true}).click();
+  await page.getByRole("button",{name:"+ Abwesenheit erfassen"}).click();
+  const dialog=page.getByRole("dialog");
+  await dialog.getByRole("combobox",{name:"Umfang",exact:true}).selectOption("0.5");
+  await dialog.getByRole("combobox",{name:"Tageshälfte (nur bei halbem Tag)",exact:true}).selectOption("afternoon");
+  await dialog.getByLabel("Von",{exact:true}).fill("2026-12-01");
+  await dialog.getByLabel("Bis",{exact:true}).fill("2026-12-01");
+  await dialog.getByRole("button",{name:"Abwesenheit eintragen"}).click();
+  await expect(page.getByRole("cell",{name:"Nachmittag",exact:true})).toBeVisible();
+  await page.getByRole("link",{name:"Hinweise",exact:true}).click();
+  await expect(page.getByRole("heading",{name:"Keine Hinweise vorhanden."})).toBeVisible();
+});
+
+test("scheduler rejects missing and incorrect secrets before database access", async ({request})=>{
+  for (const authorization of ["", "Bearer incorrect-scheduler-secret"]) {
+    const response = await request.post("/api/jobs/report-alerts", {headers:{authorization}});
+    expect(response.status()).toBe(401);
+    expect((await response.json()).error).toBe("Scheduler nicht autorisiert.");
+  }
+});
+
+test("managers can retry failed delivery, remind once and clarify with a reason", async ({page})=>{
+  await workspace(page,"admin",true,false,true);
+  await page.getByRole("link",{name:"Hinweise",exact:true}).click();
+  await expect(page.getByText(/Versand fehlgeschlagen/)).toBeVisible();
+  await page.getByRole("button",{name:"Versand erneut beauftragen"}).click();
+  await expect(page.getByText(/Hinweis an Zuständige: Versand ausstehend/)).toBeVisible();
+  await page.getByRole("button",{name:"Person in App und per E-Mail erinnern"}).click();
+  await expect(page.getByRole("button",{name:"Erinnerung bereits beauftragt"})).toBeDisabled();
+  await page.getByRole("textbox",{name:"Klärungsgrund",exact:true}).fill("Nachtrag mit Person vereinbart.");
+  await page.getByRole("button",{name:"Hinweis klären",exact:true}).click();
+  await expect(page.getByText("Mit Begründung geklärt",{exact:true})).toBeVisible();
+  await expect(page.getByText("Nachtrag mit Person vereinbart.",{exact:true})).toBeVisible();
 });

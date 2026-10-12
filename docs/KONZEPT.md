@@ -106,7 +106,8 @@ Die Wochen-Sollzeit wird pro Person über die Verteilung auf sieben Wochentage
 festgelegt. Die Oberfläche verwendet Stunden; die Datenbank speichert Minuten.
 Arbeitsmodelle haben ein Gültigkeitsdatum, sodass Änderungen historisch
 zugeordnet werden können. Optionale geplante Anfangs- und Endzeiten dienen
-der Information und starten keine automatische Zeiterfassung.
+der Information und der Fristberechnung für aktivierte Hinweise; sie starten
+keine automatische Zeiterfassung.
 
 Erfasste Arbeitszeit ist **Istzeit**, nicht Sollzeit. Das Soll ergibt sich aus
 dem hinterlegten Arbeitsmodell. Genehmigte Abwesenheiten können Sollstunden
@@ -165,7 +166,7 @@ Laufende Buchungen bleiben vorläufig; der Monats-Saldo berücksichtigt
 gegenwärtig auch das Soll zukünftiger Tage im gewählten Monat.
 Der Export ist kein Lohnabrechnungs- oder Rechnungsbeleg.
 
-### 5.7 Hinweise bei fehlender Zeiterfassung (geplant)
+### 5.7 Hinweise bei fehlender Zeiterfassung
 
 An vorgesehenen Arbeitstagen soll das System erkennen, wenn eine Person bis
 zu einem festgelegten Prüfzeitpunkt noch keine Arbeitszeit erfasst hat und
@@ -187,7 +188,7 @@ Für die Umsetzung sind je Firma folgende Regeln festzulegen:
 
 | Regel | Erforderliche Entscheidung |
 | --- | --- |
-| Prüfzeitpunkt | Feste Uhrzeit je Firma oder relativ zum geplanten Arbeitsbeginn; Zeitzone Zürich. |
+| Prüfzeitpunkt | Je Person relativ zum geplanten Arbeitsbeginn; Zeitzone Zürich. Eine feste Firmenuhrzeit ist kein aktueller Funktionsumfang. |
 | Auslöser | Zunächst keinerlei Buchung bis zum Prüfzeitpunkt; eine fehlende Nachmittagsbuchung trotz Vormittagsarbeit wäre ein eigener, gesondert zu definierender Fall. |
 | Ausnahmen | Freie Tage, gültige Arbeitsmodelle, Teil-/Ganztagsabwesenheiten und Feiertage berücksichtigen. Offene Abwesenheitsanträge benötigen eine ausdrücklich definierte Behandlung. |
 | Empfänger | Zuständige Person je Mitarbeitendem oder eine ausdrücklich konfigurierte HR-/Admin-Zuständigkeit, nicht automatisch alle Admins. |
@@ -201,7 +202,9 @@ Zuständigkeit, Wiederholungs-/Fehlerbehandlung und eine nachvollziehbare
 Zustellung. Das bestehende informative Arbeitszeitfenster wird nicht ohne
 zusätzliche Konfiguration als verbindlicher Schichtplan interpretiert.
 
-Diese Funktion ist eine neue Produktetappe und noch nicht implementiert.
+Diese Funktion ist im Pilotcode implementiert. Die neue Datenbankmigration,
+SMTP und der externe 15-Minuten-Scheduler müssen vor Einsatz eingerichtet
+und mit echten Testkonten abgenommen werden. Details stehen im README.
 
 **Bestätigte Produktentscheidungen (12. Oktober 2026):**
 
@@ -222,10 +225,15 @@ Diese Funktion ist eine neue Produktetappe und noch nicht implementiert.
   „Abwesenheit zur Prüfung offen“ statt „Zeiterfassung fehlt“.
   Halbtagsfälle müssen dem betroffenen Arbeitszeitfenster zugeordnet werden;
   das bisherige Datenmodell unterscheidet noch nicht Vormittag/Nachmittag.
-- Erkennung und Hinweiszustellung laufen serverseitig. Der konkrete
-  Ausführungsrhythmus, Zustellkanal der manuellen Erinnerung, Wiederholungen
-  und erforderliche Erweiterungen für Teilabwesenheiten sind vor der
-  technischen Umsetzung noch festzulegen.
+- Erkennung und Hinweiszustellung laufen serverseitig alle 15 Minuten.
+  Manuelle Erinnerungen werden in der App und per E-Mail bereitgestellt.
+  Die Warteschlange speichert Zustellstatus und Fehlversuche, verhindert
+  wiederholte Beauftragung derselben Erinnerung und erlaubt HR/Admin
+  manuelle Wiederholungen fehlgeschlagener Zustellungen.
+- Neue Halbtage unterscheiden Vormittag/Nachmittag; bestehende Einträge
+  ohne Zuordnung erzeugen einen Klärungshinweis. Das geplante Zeitfenster
+  wird in zwei gleich lange Hälften geteilt. Bei fehlendem oder ungeeignetem
+  Zeitfenster erfolgt keine automatische Interpretation als Schichtplan.
 
 ## 6. Benutzerführung
 
@@ -244,7 +252,7 @@ werden erst bei Bedarf geöffnet. Die Nutzer sehen nur Bereiche, die zu ihrer
 Rolle gehören. Zugriffsregeln werden zusätzlich in der Datenbank durchgesetzt,
 nicht nur über ausgeblendete Schaltflächen.
 
-### 6.1 Geführte Ersteinrichtung (geplanter Ausbau)
+### 6.1 Geführte Ersteinrichtung
 
 Jeder neue Benutzer soll einen schrittweisen Einrichtungsassistenten erhalten,
 vergleichbar mit der Ersteinrichtung eines neuen Geräts: ein Schritt pro
@@ -272,9 +280,12 @@ Eine neu hinzugefügte Firma kann eine erneute kontextspezifische Einführung
 erfordern, ohne die bereits vorhandene Authenticator-Einrichtung zu wiederholen.
 Im Alltag lässt sich die Hilfe erneut öffnen, ohne Konfiguration zurückzusetzen.
 
-**Abgrenzung zum heutigen Stand:** Bereits vorhanden sind Login-/2FA-Schritte
-und eine Einrichtungsliste für Firmen-Admins. Ein vollständiger, dauerhaft
-fortsetzbarer Assistent für alle neuen Benutzer ist noch nicht implementiert.
+**Aktueller Stand:** Login-/2FA-Schritte, Einrichtungsliste und ein
+rollenabhängiger Assistent mit dauerhaft gespeichertem Fortschritt sind
+im Pilotcode implementiert. Der Assistent führt zu den tatsächlichen
+Konfigurationsbereichen, ohne Einstellungen selbstständig zu überschreiben.
+Erforderliche Arbeitsmodelle und Projektzuweisungen blockieren den Abschluss,
+solange sie fehlen. Hinweise sind eine explizit aktivierbare Firmenoption.
 
 ## 7. Technisches Konzept
 
@@ -378,8 +389,8 @@ vollständiger gesetzlicher Konformität.
 | Abwesenheiten mit optionaler Freigabe | Im Pilotcode implementiert; Rückzug und Umdatierung noch nicht vollständig umgesetzt. |
 | PDF-/CSV-Auszüge | Implementiert; PDF-Zeichensatz aktuell für lateinische Texte ausgelegt. |
 | Geführte Oberfläche | Implementiert, einschliesslich Desktop-/Mobilansicht und Rollen-Navigation. |
-| Vollständiger Ersteinrichtungsassistent | Geplant: rollenabhängige Schrittfolge und dauerhaft gespeicherter Fortschritt für neue Benutzer. |
-| Hinweise bei fehlender Zeiterfassung | Geplant: serverseitige Prüfung, konfigurierte Zuständigkeiten, Erinnerungen und nachvollziehbare Klärung. |
+| Ersteinrichtungsassistent | Im Pilotcode implementiert: rollenabhängige Schritte, gespeicherter Fortschritt und offene Voraussetzungen. |
+| Hinweise bei fehlender Zeiterfassung | Im Pilotcode implementiert: Prüfung, Zuständigkeiten, Erinnerungen, Klärung und SMTP-Warteschlange. Scheduler/SMTP-Einrichtung und reale Zustellabnahme noch erforderlich. |
 | Authenticator-Login und Einladungen | Implementiert; Einrichtung und reale Betriebsabläufe müssen in der Pilotumgebung abgenommen werden. |
 | Stripe-Abos und kostenfreie Freischaltung | Integration implementiert; Zahlungsabläufe noch in Stripe-Testumgebung abzunehmen. |
 | Austritte, Ferienüberträge und Feiertage | Noch nicht implementiert. |
@@ -387,7 +398,7 @@ vollständiger gesetzlicher Konformität.
 | Produktionsbetrieb und Verkaufsfreigabe | Offen: Hosting, Verträge, Betriebsprozesse und Abo-Zugangspolitik. |
 
 Automatisierte Prüfungen des aktuellen Entwicklungsstands umfassen
-39 Fachlogik-/Datenbanktests und sechs isolierte Browsertests sowie Typecheck,
+Fachlogik-/Datenbanktests und isolierte Browsertests sowie Typecheck,
 Lint und Produktionsbuild. Diese Prüfungen ersetzen keine Abnahme mit real
 konfigurierten Cloud-Diensten und keinen Praxistest im Unternehmen.
 
@@ -465,7 +476,7 @@ SaaS-Verkaufsstart. Dafür sind folgende Entscheidungen erforderlich:
 | Hosting und Datenstandort | Anbieter, Region und Vertragsgrundlagen vor echten Personaldaten auswählen. |
 | Fachliche Priorität | Feiertage, Ferienkonten, Austritte und Abwesenheitskorrekturen mit der Pilotfirma bewerten. |
 | Fehlende Zeiterfassung | Prüfzeitpunkt, auslösende Fälle, Zuständigkeiten, Kanäle und Ausnahmen vor Umsetzung festlegen. |
-| Ersteinrichtung | Rollenabhängigen Assistenten mit speicherbarem Fortschritt als nächste UX-Etappe vorsehen. |
+| Ersteinrichtung | Rollenabhängigen Assistenten im Pilot einsetzen und anhand von Nutzerfeedback weiter verbessern. |
 | Erlösmodell | Firmen-Festpreis grundsätzlich bestätigen; Betrag, Leistungsgrenzen und Vertragsbedingungen nach Pilotdaten festlegen. |
 | Verkaufsfreigabe | Erst nach fachlicher, rechtlicher, technischer und betrieblicher Abnahme. |
 

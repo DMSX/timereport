@@ -6,19 +6,25 @@ import { useRouter } from "next/navigation";
 import { browserClient } from "@/lib/supabase/browser";
 import { allRows, checked } from "@/lib/query";
 import { breakViolations, correctionDeadline, displayTime, localTime, minutesLabel, monthRange, monthlyReport, vacationUsed, ZONE } from "@/lib/time";
-import type { Absence, Company, Entry, Member, Project, Resolution, Subscription, WorkModel } from "@/lib/types";
+import type { Absence, Company, EmailJob, Entry, Member, OnboardingProgress, Project, ReportAlert, ReportSetting, Resolution, Subscription, WorkModel } from "@/lib/types";
 import Modal from "./modal";
 import { isSection, sections, WorkspaceNav, type Section } from "./workspace";
 import { setupSteps } from "@/lib/onboarding";
 import WorkSchedule from "./work-schedule";
+import FirstRun, { type WizardStep } from "./first-run";
+import ReportCenter from "./report-center";
 
 type Data = {
   companies: Company[]; members: Member[]; projects: Project[]; entries: Entry[];
   models: WorkModel[]; absences: Absence[]; resolutions: Resolution[];
   assignments: { project_id: string; user_id: string; company_id: string }[];
   subscriptions: Subscription[]; operator: boolean;
+  reportSettings: ReportSetting[]; alerts: ReportAlert[]; jobs: EmailJob[];
+  holidays: { company_id: string; day: string; label: string }[];
+  progress: OnboardingProgress | null; lastChecked: string | null;
 };
-const empty: Data = { companies: [], members: [], projects: [], entries: [], models: [], absences: [], resolutions: [], assignments: [], subscriptions: [], operator: false };
+const empty: Data = { companies: [], members: [], projects: [], entries: [], models: [], absences: [], resolutions: [], assignments: [], subscriptions: [], operator: false,
+  reportSettings: [], alerts: [], jobs: [], holidays: [], progress: null, lastChecked: null };
 const text = (form: FormData, key: string) => String(form.get(key) ?? "").trim();
 const statusLabel = { pending: "Offen", approved: "Genehmigt", rejected: "Abgelehnt" };
 const roleLabel = { employee: "Mitarbeitende", hr: "HR", admin: "Admin" };
@@ -48,6 +54,8 @@ export default function Dashboard() {
   const [loaded, setLoaded] = useState(false);
   const [now, setNow] = useState(DateTime.now().setZone(ZONE));
   const [editing, setEditing] = useState<Entry | null>(null);
+  const [wizardDismissed, setWizardDismissed] = useState(false);
+  const [wizardError, setWizardError] = useState("");
   const loadSequence = useRef(0);
 
   function navigate(section: Section) {
@@ -87,9 +95,21 @@ export default function Dashboard() {
     const own = selected ? await db.from("company_members").select("*").eq("company_id", selected).eq("user_id", auth.user.id).maybeSingle() : { data: null, error: null };
     if (own.error) throw new Error(own.error.message);
     if (!own.data) {
+      const { data: progress, error: progressError } = await db.from("onboarding_progress").select("*").eq("user_id", auth.user.id).eq("scope", "operator").maybeSingle();
+      if (progressError) throw new Error(`Neue Datenbankmigration erforderlich: ${progressError.message}`);
       if (sequence !== loadSequence.current) return;
-      setData({ ...empty, companies, subscriptions, operator: operators.length > 0 }); setLoaded(true); return;
+      setData({ ...empty, companies, subscriptions, operator: operators.length > 0, progress }); setLoaded(true); return;
     }
+    const [reportSettings, alerts, jobs, holidays, progressResult, scheduler] = await Promise.all([
+      allRows((from, to) => db.from("report_settings").select("*").eq("company_id", selected).order("user_id").range(from, to)),
+      allRows((from, to) => db.from("report_alerts").select("*").eq("company_id", selected).order("work_day", { ascending: false }).order("id").range(from, to)),
+      allRows((from, to) => db.from("email_outbox").select("*").eq("company_id", selected).order("id").range(from, to)),
+      allRows((from, to) => db.from("company_holidays").select("*").eq("company_id", selected).order("day").range(from, to)),
+      db.from("onboarding_progress").select("*").eq("user_id", auth.user.id).eq("scope", selected).maybeSingle(),
+      db.from("scheduler_status").select("*").eq("id", 1).maybeSingle(),
+    ]);
+    if (progressResult.error) throw new Error(`Neue Datenbankmigration erforderlich: ${progressResult.error.message}`);
+    if (scheduler.error) throw new Error(scheduler.error.message);
     const [members, projects, entries, models, absences, resolutions, assignments] = await Promise.all([
       allRows((from, to) => db.from("company_members").select("*").eq("company_id", selected).order("user_id").range(from, to)),
       allRows((from, to) => db.from("projects").select("*").eq("company_id", selected).order("name").order("id").range(from, to)),
@@ -100,7 +120,8 @@ export default function Dashboard() {
       allRows((from, to) => db.from("project_members").select("*").eq("company_id", selected).order("project_id").order("user_id").range(from, to)),
     ]);
     if (sequence !== loadSequence.current) return;
-    setData({ companies, members, projects, entries, models, absences, resolutions, assignments, subscriptions, operator: operators.length > 0 });
+    setData({ companies, members, projects, entries, models, absences, resolutions, assignments, subscriptions, operator: operators.length > 0,
+      reportSettings, alerts, jobs, holidays, progress: progressResult.data, lastChecked: scheduler.data?.last_checked_at ?? null });
     setLoaded(true);
   }, [companyId, db, router]);
   useEffect(() => {
@@ -112,6 +133,17 @@ export default function Dashboard() {
     const timer = setInterval(() => setNow(DateTime.now().setZone(ZONE)), 1000);
     return () => clearInterval(timer);
   }, []);
+  useEffect(() => {
+    if (!loaded || !companyId) return;
+    const timer = setInterval(() => {
+      if (busy || document.visibilityState !== "visible") return;
+      void reload().catch((error: unknown) => {
+        setMessage(error instanceof Error ? error.message : "Hinweise konnten nicht aktualisiert werden.");
+        setFailed(true);
+      });
+    }, 60000);
+    return () => clearInterval(timer);
+  }, [busy, companyId, loaded, reload]);
 
   async function run(operation: () => Promise<unknown>, success: string) {
     setBusy(true); setMessage(""); setFailed(false);
@@ -147,7 +179,7 @@ export default function Dashboard() {
   const range = monthRange(month);
   const visibleEntries = entries.filter((e) => localTime(e.started_at) < range.end && localTime(e.ended_at ?? now.toISO()!) > range.start);
   const allowed: Section[] = [
-    ...(ownMember ? ["time", "history", "absences", "report"] as Section[] : []),
+    ...(ownMember ? ["time", "history", "absences", "report", "notifications"] as Section[] : []),
     ...(manager ? ["team"] as Section[] : []),
     ...(admin ? ["projects", "settings", "billing"] as Section[] : []),
     ...(data.operator ? ["operator"] as Section[] : []),
@@ -166,10 +198,38 @@ export default function Dashboard() {
   const steps = setupSteps(data.members, data.projects, data.models, data.assignments, today);
   const needsSetup = admin && steps.some((s) => !s.done);
   const pending = data.absences.filter((a) => a.status === "pending");
+  const dueAlerts = data.alerts.filter((a) => a.status === "open" && localTime(a.due_at) <= now);
   const elapsedSeconds = running ? Math.max(0, Math.floor(now.diff(localTime(running.started_at), "seconds").seconds)) : 0;
   const timerLabel = `${String(Math.floor(elapsedSeconds / 3600)).padStart(2, "0")}:${String(Math.floor(elapsedSeconds / 60) % 60).padStart(2, "0")}:${String(elapsedSeconds % 60).padStart(2, "0")}`;
   const filteredMembers = data.members.filter((m) => m.display_name.toLocaleLowerCase("de-CH").includes(search.toLocaleLowerCase("de-CH")));
   const filteredProjects = data.projects.filter((p) => p.name.toLocaleLowerCase("de-CH").includes(search.toLocaleLowerCase("de-CH")));
+  const wizardSteps: WizardStep[] = ownMember ? [
+    { title: "Willkommen in deinem Arbeitsplatz", description: "Dein Zugang ist durch Authenticator geschützt. Wir richten deinen Firmenkontext gemeinsam ein.", ready: true, required: true },
+    ...(admin ? [
+      { title: "Firmenregeln festlegen", description: "Prüfe Firmenname, Pausen, Korrekturfrist und Freigaben. Speichere Änderungen im Bereich Firmenregeln.", section: "settings" as const, ready: true, required: false },
+      { title: "Arbeitszeiten hinterlegen", description: "Jede Person benötigt ein gültiges Arbeitsmodell. Für Hinweise werden zusätzlich geplante Uhrzeiten benötigt.", section: "team" as const, ready: steps[0].done, required: true },
+      { title: "Projekte und Team verbinden", description: "Erstelle ein aktives Projekt und weise jede Person zu.", section: "projects" as const, ready: steps[1].done && steps[2].done, required: true },
+      { title: "Hinweise konfigurieren", description: "Optional: Im Team je Person die Prüfung aktivieren, HR/Admin bestimmen und eine Frist nach Arbeitsbeginn festlegen. Ohne Aktivierung werden keine Hinweise erstellt.", section: "team" as const, ready: true, required: false },
+    ] : [
+      { title: "Deine Arbeitszeiten prüfen", description: ownModels.some((m) => m.valid_from <= today) ? `Dein Wochen-Soll: ${minutesLabel(ownModels.filter((m) => m.valid_from <= today).sort((a,b) => b.valid_from.localeCompare(a.valid_from))[0].weekday_minutes.reduce((sum,n) => sum+n,0))} h. Änderungen übernimmt HR/Admin.` : "Dein Arbeitsmodell fehlt noch. Bitte HR/Admin um Einrichtung bitten.", section: "time" as const, ready: ownModels.some((m) => m.valid_from <= today), required: true },
+      { title: "Deine Projekte kennenlernen", description: assigned.length ? `Zugewiesen: ${assigned.map((p) => p.name).join(", ")}. Einchecken erstellt eine echte Buchung; die Einführung selbst tut das nicht.` : "Noch kein aktives Projekt zugewiesen. Bitte den Firmen-Admin kontaktieren.", section: "time" as const, ready: assigned.length > 0, required: true },
+    ]),
+    { title: "Zeiten und Abwesenheiten verstehen", description: "Auschecken startet eine Pause. Nachträge liegen unter Zeitbuchungen. Abwesenheiten erfassen und bei Bedarf genehmigen lassen; Hinweise sind keine automatische Fehlzeitenbewertung.", section: "absences" as const, ready: true, required: false },
+    { title: "Bereit für deinen ersten Arbeitstag", description: "Du kannst jederzeit über Einführung fortsetzen bzw. erneut öffnen. Deine Arbeitszeiten und Firmeneinstellungen bleiben dabei erhalten.", section: "time" as const, ready: true, required: true },
+  ] : [
+    { title: "Willkommen als Betreiber", description: "Dein sicherer Zugang ist eingerichtet. Als Betreiber verwaltest du Firmen, nicht automatisch ihre Personaldaten.", ready: true, required: true },
+    { title: "Erste Firma aufnehmen", description: "Firmenname, Admin und E-Mail hinterlegen. Deine bestehende E-Mail kann als Admin verwendet werden.", section: "operator" as const, ready: data.companies.length > 0, required: true },
+    { title: "Freischaltung und Übergabe", description: "Entscheide in der SaaS-Verwaltung über die kostenfreie Freischaltung. Firmen-Admins erhalten ihre eigene Einrichtung für Arbeitsmodelle und Projekte.", section: "operator" as const, ready: true, required: false },
+  ];
+  async function saveWizard(step: number, completed: boolean) {
+    setWizardError("");
+    try {
+      checked(await db.from("onboarding_progress").upsert({
+        user_id: userId, scope: ownMember ? companyId : "operator", step: Math.min(step, wizardSteps.length - 1), completed, updated_at: new Date().toISOString(),
+      }, { onConflict: "user_id,scope" }).select());
+      await reload();
+    } catch (error) { setWizardError(error instanceof Error ? error.message : "Fortschritt konnte nicht gespeichert werden."); }
+  }
 
   return <div className="shell">
     <a className="skip-link" href="#workspace">Zum Inhalt</a>
@@ -184,9 +244,10 @@ export default function Dashboard() {
       <div className="header-tools">
         {data.companies.length > 0 && <label>Firma<select value={companyId} disabled={busy} onChange={(e) => {
           loadSequence.current++;
-          setLoaded(false); setData(empty); setEditing(null); setPanel(null); setSearch(""); setCompanyId(e.target.value); setPersonId(userId);
+          setLoaded(false); setData(empty); setEditing(null); setPanel(null); setSearch(""); setWizardDismissed(false); setWizardError(""); setCompanyId(e.target.value); setPersonId(userId);
         }}>{data.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
         <span className="secure-label">2FA geschützt</span>
+        {loaded && <button className="secondary compact" disabled={busy} onClick={async () => { setWizardDismissed(false); await saveWizard(0, false); }}>Einführung öffnen</button>}
       </div>
     </header>
     <main id="workspace">
@@ -206,11 +267,15 @@ export default function Dashboard() {
       {!loaded && !failed && <div className="loading-state" role="status"><span className="loading-dot" /> Daten werden geladen …</div>}
       {!loaded && failed && <button className="secondary" disabled={busy} onClick={() => run(reload, "Übersicht aktualisiert.")}>Erneut laden</button>}
       {loaded && !ownMember && !data.operator && <section className="card"><p>Dein Benutzer ist noch keiner Firma zugewiesen. Bitte kontaktiere deinen Admin.</p></section>}
+      {loaded && (ownMember || data.operator) && !data.progress?.completed && !wizardDismissed &&
+        <FirstRun steps={wizardSteps} progress={data.progress} busy={busy} error={wizardError} onSave={saveWizard} onNavigate={navigate} onLater={() => setWizardDismissed(true)} />}
+      {loaded && !data.progress?.completed && wizardDismissed && <button className="secondary compact" onClick={() => setWizardDismissed(false)}>Einrichtung fortsetzen</button>}
       {manager && ["history", "absences", "report"].includes(current) && <label className="person-picker">Ansicht für<select value={selectedPerson} disabled={busy} onChange={(e) => { setPersonId(e.target.value); setEditing(null); }}>
         {data.members.map((m) => <option key={m.user_id} value={m.user_id}>{m.display_name}</option>)}
       </select></label>}
 
       {ownMember && current === "time" && <>
+        {!!dueAlerts.length && <button className="review-banner" onClick={()=>navigate("notifications")}><strong>{dueAlerts.length} offene Hinweise</strong><span>Zeiterfassung und Rückmeldungen prüfen →</span></button>}
         {needsSetup && <section className="onboarding card">
           <div className="section-heading"><div><span className="eyebrow">Einrichtung</span><h2>In drei Schritten startklar.</h2></div><span className="badge">{steps.filter((s) => s.done).length} von 3 erledigt</span></div>
           <div className="setup-steps">{steps.map((step, i) => <button key={step.title} className={`setup-step ${step.done ? "done" : ""}`} onClick={() => navigate(step.section)}>
@@ -312,16 +377,22 @@ export default function Dashboard() {
         {panel === "absence" && <Modal title="Eigene Abwesenheit erfassen" busy={busy} onClose={() => setPanel(null)}>
           {failed && message && <p role="alert" className="notice error">{message}</p>}
           <form onSubmit={formAction(async (f) => {
-            checked(await db.rpc("request_absence", { p_company: companyId, p_kind: text(f, "kind"), p_start: text(f, "start"), p_end: text(f, "end"), p_fraction: Number(f.get("fraction")) }));
+            const fraction = Number(f.get("fraction"));
+            checked(await db.rpc("request_absence", { p_company: companyId, p_kind: text(f, "kind"), p_start: text(f, "start"), p_end: text(f, "end"), p_fraction: fraction, p_part: fraction === 0.5 ? text(f, "part") : null }));
           }, company?.absence_approval ? "Abwesenheit zur Freigabe eingereicht." : "Abwesenheit gespeichert.")}>
             <div className="form-grid"><label>Art<select name="kind"><option value="vacation">Ferien</option><option value="sick">Krankheit</option></select></label>
               <label>Umfang<select name="fraction"><option value="1">Ganze Tage</option><option value="0.5">Halber Tag (nur ein Datum)</option></select></label>
+              <label>Tageshälfte (nur bei halbem Tag)<select name="part"><option value="morning">Vormittag</option><option value="afternoon">Nachmittag</option></select></label>
               <label>Von<input type="date" name="start" required /></label><label>Bis<input type="date" name="end" required /></label></div>
             <button disabled={busy}>Abwesenheit eintragen</button>
           </form>
         </Modal>}
         <div className="table-wrap"><table><thead><tr><th>Art</th><th>Von / bis</th><th>Umfang</th><th>Status</th><th>Entscheidung</th></tr></thead><tbody>
-          {absences.map((a) => <tr key={a.id}><td>{a.kind === "vacation" ? "Ferien" : "Krankheit"}</td><td>{a.starts_on} – {a.ends_on}</td><td>{a.fraction === 0.5 ? "Halber Tag" : "Ganze Tage"}</td><td>{statusLabel[a.status]}</td><td>
+          {absences.map((a) => <tr key={a.id}><td>{a.kind === "vacation" ? "Ferien" : "Krankheit"}</td><td>{a.starts_on} – {a.ends_on}</td><td>{a.fraction === 0.5 ? a.day_part === "morning" ? "Vormittag" : a.day_part === "afternoon" ? "Nachmittag" : "Halber Tag – Zuordnung offen" : "Ganze Tage"}</td><td>{statusLabel[a.status]}</td><td>
+            {manager && a.fraction===0.5 && <details><summary>Tageshälfte zuordnen</summary><form onSubmit={formAction(async(f)=>{
+              const {error}=await db.rpc("set_absence_part",{p_absence:a.id,p_part:text(f,"part"),p_reason:text(f,"reason")});
+              if(error) throw new Error(error.message);
+            },"Tageshälfte gespeichert; Hinweise werden beim nächsten Scheduler-Lauf neu geprüft.")}><label>Tageshälfte<select name="part" defaultValue={a.day_part ?? "morning"}><option value="morning">Vormittag</option><option value="afternoon">Nachmittag</option></select></label><label>Änderungsgrund<input name="reason" required minLength={3} maxLength={1000} /></label><button disabled={busy}>Zuordnung speichern</button></form></details>}
             {manager && a.status === "pending" && <form onSubmit={formAction(async (f) => {
               const { error } = await db.rpc("review_absence", { p_absence: a.id, p_status: text(f, "status"), p_reason: text(f, "reason") });
               if (error) throw new Error(error.message);
@@ -329,6 +400,21 @@ export default function Dashboard() {
           </td></tr>)}
           {!absences.length && <tr><td colSpan={5}>Noch keine Abwesenheiten.</td></tr>}
         </tbody></table></div>
+      </>}
+      {ownMember && current === "notifications" && <>
+        <div className="actions"><button className="secondary" disabled={busy} onClick={() => run(reload, "Hinweise aktualisiert.")}>Hinweise aktualisieren</button></div>
+        {manager && <p className="muted">{data.lastChecked ? `Letzte serverseitige Prüfung: ${displayTime(data.lastChecked)}` : "Scheduler noch nicht ausgeführt. SMTP und Zeitplan gemäss README einrichten."}</p>}
+        <ReportCenter alerts={data.alerts} jobs={data.jobs} members={data.members} userId={userId} manager={manager} busy={busy} nowMs={now.toMillis()} onRetry={async(job)=>{
+          await run(async()=>{
+            const {error}=await db.rpc("retry_report_email",{p_job:job});
+            if(error) throw new Error(error.message);
+          },"Neuer Zustellversuch für den nächsten Scheduler-Lauf beauftragt.");
+        }} onAction={async (alert, action, reason) => {
+          await run(async () => {
+            const { error } = await db.rpc("handle_report_alert", { p_alert: alert, p_action: action, p_reason: reason ?? "" });
+            if (error) throw new Error(error.message);
+          }, action === "remind" ? "Erinnerung in der App sichtbar; E-Mail zum Versand durch den Scheduler vorgemerkt." : "Hinweis nachvollziehbar geklärt.");
+        }} />
       </>}
 
       {ownMember && current === "report" && <>
@@ -369,7 +455,7 @@ export default function Dashboard() {
               <label>Rolle<select name="role" defaultValue={m.role}><option value="employee">Mitarbeitende</option><option value="hr">HR</option><option value="admin">Admin</option></select></label>
               <label>Ferientage pro Jahr<input name="vacation" type="number" min={0} max={100} step={0.5} defaultValue={m.vacation_days} required /></label></div><button disabled={busy} className="secondary">Profil speichern</button>
           </form></details>}
-          <details><summary>Arbeitsmodell hinterlegen</summary><p>Gültig ab Datum, bis zum nächsten Modell. Die Tagesverteilung ergibt das Wochen-Soll. Geplante Uhrzeiten sind informativ und starten keine Buchungen.</p>
+          <details><summary>Arbeitsmodell hinterlegen</summary><p>Gültig ab Datum, bis zum nächsten Modell. Die Tagesverteilung ergibt das Wochen-Soll. Geplante Uhrzeiten starten keine Buchungen, dienen aber als Grundlage aktivierter Fehlbuchungshinweise. Bei Halbtagen teilt das System das geplante Zeitfenster in zwei gleiche Hälften.</p>
             <WorkSchedule key={m.user_id + data.models.filter((w) => w.user_id === m.user_id).map((w) => w.id + w.weekday_minutes.join(",")).join("|")}
               model={data.models.filter((w) => w.user_id === m.user_id && w.valid_from <= today).sort((a, b) => b.valid_from.localeCompare(a.valid_from))[0]}
               today={today} busy={busy} onSubmit={formAction(async (f) => {
@@ -377,6 +463,22 @@ export default function Dashboard() {
               checked(await db.from("work_models").upsert({ company_id: companyId, user_id: m.user_id, valid_from: text(f, "from"), weekday_minutes, planned_start: text(f, "start") || null, planned_end: text(f, "end") || null }, { onConflict: "company_id,user_id,valid_from" }).select());
             }, "Arbeitsmodell gespeichert.")} />
             {data.models.filter((w) => w.user_id === m.user_id).map((w) => <p key={w.id}>Ab {w.valid_from}: {minutesLabel(w.weekday_minutes.reduce((sum, n) => sum + n, 0))} h / Woche · {w.planned_start ?? "—"} bis {w.planned_end ?? "—"}</p>)}
+          </details>
+          <details><summary>Fehlende Zeiterfassung: Zuständigkeit und Frist</summary>
+            <p className="muted">Die Prüfung berücksichtigt Arbeitstage, Feiertage und Abwesenheiten. Der geplante Beginn muss im gültigen Arbeitsmodell hinterlegt sein; für Halbtage auch das geplante Ende. Zuständige müssen HR/Admin dieser Firma sein.</p>
+            <form onSubmit={formAction(async (f) => {
+              checked(await db.from("report_settings").upsert({
+                company_id: companyId, user_id: m.user_id, responsible_id: text(f,"responsible") || null,
+                delay_minutes: text(f,"delay") ? Number(f.get("delay")) : null, enabled: f.get("enabled")==="on",
+              }, { onConflict: "company_id,user_id" }).select());
+            }, "Hinweisregeln gespeichert.")}>
+              <label className="check"><input type="checkbox" name="enabled" defaultChecked={data.reportSettings.find((s)=>s.user_id===m.user_id)?.enabled} /> Fehlende Zeiterfassung prüfen</label>
+              <div className="form-grid"><label>Zuständige Person<select name="responsible" defaultValue={data.reportSettings.find((s)=>s.user_id===m.user_id)?.responsible_id ?? ""}><option value="">Bitte wählen</option>{data.members.filter((p)=>p.role!=="employee").map((p)=><option key={p.user_id} value={p.user_id}>{p.display_name}</option>)}</select></label>
+              <label>Frist nach Arbeitsbeginn (Minuten)<input type="number" min={1} max={720} name="delay" defaultValue={data.reportSettings.find((s)=>s.user_id===m.user_id)?.delay_minutes ?? ""} /></label></div>
+              {data.reportSettings.find((s)=>s.user_id===m.user_id)?.enabled && !data.models.some((w)=>w.user_id===m.user_id && w.valid_from<=today && w.planned_start) && <p className="notice error">Aktiviert, aber kein gültiger geplanter Arbeitsbeginn: Es werden keine Fehlbuchungshinweise erzeugt. Bitte Arbeitsmodell ergänzen.</p>}
+              {data.reportSettings.find((s)=>s.user_id===m.user_id)?.enabled && !data.members.some((p)=>p.user_id===data.reportSettings.find((s)=>s.user_id===m.user_id)?.responsible_id && p.role!=="employee") && <p className="notice error">Zuständigkeit nicht mehr gültig. Bitte HR/Admin neu zuweisen.</p>}
+              <button className="secondary" disabled={busy}>Hinweisregeln speichern</button>
+            </form>
           </details>
         </section>)}
       </>}
@@ -392,6 +494,14 @@ export default function Dashboard() {
           <label className="check"><input name="approval" type="checkbox" defaultChecked={company?.absence_approval} /> Abwesenheiten müssen genehmigt werden</label>
           <p>1 zusätzliche Woche: Korrektur bis Sonntag der Folgewoche, 23:59 Uhr Zürich. Danach nur HR/Admin.</p><button disabled={busy}>Regeln speichern</button>
         </form></section>
+        <section className="card"><h2>Firmenweite Feiertage / arbeitsfreie Tage</h2><p>Diese Tage unterdrücken Fehlbuchungshinweise. Die Sollzeit im Monatsrapport wird derzeit nicht automatisch verändert.</p>
+          <form onSubmit={formAction(async (f) => {
+            checked(await db.from("company_holidays").upsert({ company_id:companyId, day:text(f,"day"), label:text(f,"label") }).select());
+          }, "Arbeitsfreier Tag gespeichert.")}><div className="form-grid"><label>Datum<input name="day" type="date" required /></label><label>Bezeichnung<input name="label" required maxLength={120} /></label></div><button disabled={busy}>Tag hinzufügen</button></form>
+          {data.holidays.map((h)=><p key={h.day}>{h.day} · {h.label} <button className="secondary compact" disabled={busy} onClick={()=>run(async()=>{
+            checked(await db.from("company_holidays").delete().eq("company_id",companyId).eq("day",h.day).select());
+          },"Arbeitsfreier Tag entfernt.")}>Entfernen</button></p>)}
+        </section>
       </>}
       {admin && current === "projects" && <>
         <div className="collection-toolbar"><span>{data.projects.filter((p) => p.active).length} aktive Projekte</span><label>Projekte durchsuchen<input type="search" placeholder="Projekt suchen …" value={search} onChange={(e) => setSearch(e.target.value)} /></label></div>

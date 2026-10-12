@@ -31,6 +31,10 @@ npm run dev
    SQL-Editor ausführen. Die Anwendung verwendet das öffentliche Schema dieses
    Projekts; die Migration ist nicht für eine bereits anderweitig genutzte
    Datenbank gedacht.
+   Bei einer Neuinstallation anschliessend auch
+   `supabase\migrations\202610120002_onboarding_alerts.sql` ausführen.
+   **Bei einer bereits eingerichteten Pilotdatenbank nur diese zweite
+   Migration einmal ausführen**, nicht die erste wiederholen.
 2. Projekt-URL und Publishable Key in `.env.local` hinterlegen. Der
    `SUPABASE_SERVICE_ROLE_KEY` ist nur für serverseitige Einladungen,
    Firmenaufnahme und Stripe-Synchronisation bestimmt. Niemals als
@@ -67,6 +71,8 @@ npm run dev
    legt ein Passwort fest und kann Mitarbeitende einladen, Arbeitsmodelle
    anlegen, Projekte erstellen und Personen zuweisen. Bestehende Benutzer
    werden anhand der E-Mail der weiteren Firma zugeordnet, ohne neue Einladung.
+   Neue Benutzer erhalten jetzt einen rollenabhängigen Einrichtungsassistenten
+   mit pro Benutzer/Firmenmitgliedschaft gespeichertem Fortschritt.
    Neue Mitarbeitende haben absichtlich **kein implizites Arbeitsmodell** und
    **keine impliziten Projektzuweisungen**.
 
@@ -94,6 +100,17 @@ Tagessoll, Wochenzeit bis heute und Ein-/Auschecken. Neue Firmen-Admins sehen
 eine Einrichtungshilfe: Arbeitsmodelle hinterlegen, Projekt erstellen und
 Team zuweisen. Betreiber ohne Firma erhalten einen eigenen Einstieg zur
 Firmenaufnahme, statt einer leeren Zeiterfassung.
+
+Der Ersteinrichtungsassistent ergänzt diese Liste mit einer gespeicherten
+Schrittfolge für Betreiber, Firmen-Admins und Mitarbeitende/HR. Mit **Später
+fortsetzen** kann die Führung vorübergehend ausgeblendet werden; der letzte
+gespeicherte Schritt bleibt erhalten. **Einführung öffnen** startet die Führung
+erneut, ohne Arbeitsdaten oder Firmeneinstellungen zurückzusetzen.
+Arbeitsmodell und Projektzuweisung sind für den Abschluss erforderliche
+Voraussetzungen. Firmenregeln und die optionale Aktivierung von Hinweisen
+werden ausdrücklich erklärt; es werden keine unsichtbaren Defaults oder
+Tutorial-Arbeitsbuchungen erzeugt. Login und 2FA bleiben unabhängig vom
+Assistenten verpflichtend.
 
 Die Seitennavigation trennt Arbeitsplatz (Arbeitstag, Zeitbuchungen,
 Abwesenheiten, Monatsrapport), Verwaltung (Team, Projekte, Firmenregeln,
@@ -125,10 +142,100 @@ speichert weiterhin volle Minuten.
 | Freigaben | Je Firma optional; bei ausgeschalteter Freigabe sind neue Anträge direkt genehmigt. Bestehende offene Anträge bleiben offen. |
 | Abwesenheiten | Nur genehmigte Abwesenheiten werden mit den jeweiligen geplanten Minuten gutgeschrieben. Überschneidende Abwesenheiten sind gesperrt; historische Selbstbuchungen unterliegen der Korrekturfrist. |
 | Rapporte | Tagesübersicht und Projektbuchungen in PDF/CSV, Zeitzone Zürich; Monatsgrenzen und Sommer-/Winterzeit berücksichtigen tatsächliche verstrichene Minuten. |
+| Fehlende Zeiterfassung | Je Person aktivierbare Prüffrist nach geplantem Arbeitsbeginn; zuständige HR-/Admin-Person derselben Firma. Hinweise und manuelle Erinnerungen stehen unter **Hinweise**. |
+| Halbtage | Neue Einträge benötigen Vormittag/Nachmittag. HR/Admin kann alte Einträge mit Änderungsgrund zuordnen. Das geplante Zeitfenster wird für Halbtage in zwei gleich lange Hälften geteilt. |
 
 Die Anwendung beansprucht **keine automatische Schweizer
 Arbeitsrechtskonformität**. Die beispielhafte 2h/15min-Regel ist eine frei
 konfigurierbare Geschäftsregel, keine vollständige gesetzliche Pausenregel.
+
+## Hinweise und E-Mail-Erinnerungen aktivieren
+
+1. Die zweite SQL-Migration ausführen und den Entwicklungsserver nach
+   Konfigurationsänderungen neu starten.
+2. Unter **Team → Arbeitsmodell** den geplanten Arbeitsbeginn hinterlegen.
+   Für Halbtage zusätzlich das geplante Ende setzen. Tagesfenster mit Ende
+   vor Beginn werden nicht als Halbtags-Schichtplan interpretiert, sondern
+   erzeugen einen Klärungshinweis.
+3. Unter **Team → Fehlende Zeiterfassung** je Person eine Frist in Minuten,
+   die zuständige HR-/Admin-Person und die Aktivierung festlegen.
+   Keine automatische Aktivierung oder vorgetäuschte Zuständigkeit.
+4. Firmenweite Feiertage/arbeitsfreie Tage unter **Firmenregeln** hinterlegen.
+   Sie unterdrücken Hinweise, ändern derzeit aber nicht die Sollzeit im Rapport.
+5. Diese zusätzlichen Werte lokal bzw. als Hosting-Secrets konfigurieren:
+
+   ```dotenv
+   CRON_SECRET=LANGES-ZUFAELLIGES-GEHEIMNIS
+   SMTP_HOST=DEIN-SMTP-SERVER
+   SMTP_PORT=587
+   SMTP_SECURE=false
+   SMTP_USER=DEIN-SMTP-BENUTZER
+   SMTP_PASSWORD=DEIN-SMTP-PASSWORT
+   SMTP_FROM=TimeReport <ABSENDER@DEINE-DOMAIN>
+   ```
+
+   Port 587 verwendet verpflichtendes STARTTLS; bei implizitem TLS
+   üblicherweise Port 465 und `SMTP_SECURE=true`. Absenderberechtigung,
+   SPF/DKIM und Zustellfähigkeit mit dem Maildienst einrichten.
+   Die SMTP-Einstellungen für Supabase-Einladungen sind separat:
+   TimeReport übernimmt diese nicht automatisch aus Supabase.
+6. Einen Hosting-Scheduler **alle 15 Minuten** mit folgendem HTTP-Aufruf
+   konfigurieren (keine automatische Hosting-Einrichtung durch das Projekt):
+
+   ```text
+   POST https://DEIN-HOST/api/jobs/report-alerts
+   Authorization: Bearer DEIN-CRON-SECRET
+   ```
+
+   Scheduler mit POST, geschütztem Header, ausreichender Laufzeit
+   (mindestens drei Minuten für den Versandbatch) und Alarmierung bei
+   Nicht-2xx-Antworten verwenden. Geheimnis nicht in die URL aufnehmen.
+   Lokal lässt sich dieser Endpunkt mit demselben Header gezielt auslösen.
+
+Der Lauf prüft den aktuellen Zürcher Arbeitstag, den Vortag sowie bestehende offene
+Hinweise. Eine einzige Buchung, einschliesslich eines laufenden oder
+über Mitternacht reichenden Blocks, verhindert den Fehlbuchungshinweis.
+Es gibt keine Prüfung auf eine fehlende zusätzliche Nachmittagsbuchung.
+Freie Tage, deaktivierte Regeln, fehlender geplanter Beginn und genehmigte
+Ganztagsabwesenheiten erzeugen keine Fehlbuchungsmeldung. Konfigurationslücken
+werden im Team angezeigt. Bei offener Abwesenheit erscheint ein Prüfhinweis;
+alte Halbtage ohne Zuordnung oder ohne klares Zeitfenster erzeugen einen
+Klärungshinweis statt einer Fehlzeitenbehauptung. Eine genehmigte
+Vormittagsabwesenheit verschiebt die Prüffrist auf den Beginn der zweiten Hälfte
+des geplanten Fensters. Bei genehmigtem Nachmittag wird die Prüfung auf das
+Ende der ersten Hälfte begrenzt.
+
+Verantwortliche sehen Hinweise und können **manuell** eine Erinnerung
+auslösen. Mitarbeitende sehen diesen Hinweis erst nach der Erinnerung.
+E-Mails enthalten keine Diagnosen oder Namen der betroffenen Person;
+Details sind nur nach berechtigtem Login zugänglich. HR/Admin kann Hinweise
+mit Grund klären. Nachträge und Abwesenheitsänderungen werden im nächsten
+Scheduler-Lauf neu bewertet, ursprüngliche Hinweisdatensätze bleiben erhalten.
+Verschiebt sich dabei eine offene Prüffrist in die Zukunft, wird der Hinweis
+als zurückgestellt angezeigt und bis dahin keine Erinnerung versendet.
+Die geöffnete Oberfläche aktualisiert Daten im Hintergrund jede Minute;
+alternativ **Hinweise aktualisieren** verwenden.
+
+E-Mail-Aufträge werden dauerhaft gespeichert, dedupliziert und in Batches
+von bis zu fünf Nachrichten mit einer Lease abgearbeitet. Fehlversuche werden
+mit zunehmendem Abstand bis zu fünfmal versucht. Der Status bleibt in
+**Hinweise** sichtbar; HR/Admin kann einen weiteren Versuch beauftragen.
+Vor dem Versand werden Hinweis und Empfängerberechtigung erneut geprüft.
+Fehlende SMTP-Konfiguration oder Versandfehler liefern eine Fehlerantwort,
+keine Erfolgsmeldung. In-App-Hinweise können dennoch bereits gespeichert sein.
+**Vom Mailserver angenommen** bedeutet nicht nachweislich im Postfach gelesen.
+SMTP und Datenbank bilden keine gemeinsame Transaktion: Bei einem Ausfall
+zwischen Versand und Statusspeicherung ist eine doppelte Zustellung möglich.
+Ein stabiler Message-ID-Wert unterstützt die Zuordnung, garantiert aber keine
+Exactly-once-Zustellung.
+
+Der Vortag wird ebenfalls geprüft, damit eine lange Frist nach einem späten
+Arbeitsbeginn nicht an Mitternacht verloren geht. Das gilt auch unmittelbar
+nach Aktivierung einer Prüfregel. Der Scheduler führt keinen allgemeinen
+rückwirkenden Scan aller nie geprüften Tage aus. Bei
+längeren Scheduler-Ausfällen müssen fehlende Tage fachlich nachgeprüft werden.
+Die letzte erfolgreiche Datenprüfung ist für HR/Admin unter **Hinweise**
+sichtbar; sie ist kein Nachweis, dass alle E-Mails erfolgreich versendet wurden.
 
 ## Stripe einrichten
 
@@ -209,7 +316,7 @@ Es werden keine Cloud-Zugangsdaten für diese Tests benötigt.
 - Keine automatische Feiertagsverwaltung (Kanton), Ferienüberträge,
   Teilzeit-Pro-rata-Guthaben oder jahresspezifische Ferienkonten.
 - Abwesenheiten können noch nicht selbst zurückgezogen oder nachträglich
-  umdatiert werden.
+  umdatiert werden; HR/Admin kann die Tageshälfte mit Grund korrigieren.
 - Keine Deaktivierung/Austritte von Mitarbeitenden oder Benutzer-Self-Service
   für Passwortwiederherstellung. Keine automatische Migration alter
   Arbeitsmodelle oder Löschung von Firmen.

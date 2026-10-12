@@ -7,6 +7,7 @@ export const sections = {
   history: { title: "Zeitbuchungen", description: "Arbeitsblöcke prüfen, nachtragen und korrigieren.", group: "Arbeitsplatz" },
   absences: { title: "Abwesenheiten", description: "Ferien planen, Krankheit erfassen und Anträge verfolgen.", group: "Arbeitsplatz" },
   report: { title: "Monatsrapport", description: "Arbeitszeit, Soll und Abwesenheiten in einem Auszug.", group: "Arbeitsplatz" },
+  notifications: { title: "Hinweise", description: "Fehlende Zeiterfassung prüfen, erinnern und nachvollziehbar klären.", group: "Arbeitsplatz" },
   team: { title: "Team", description: "Menschen, Rollen und Arbeitsmodelle übersichtlich verwalten.", group: "Verwaltung" },
   projects: { title: "Projekte", description: "Projekte organisieren und Mitarbeitende zuweisen.", group: "Verwaltung" },
   settings: { title: "Firmenregeln", description: "Pausen, Korrekturfristen und Freigaben für dein Team.", group: "Verwaltung" },
@@ -29,6 +30,7 @@ const paths: Record<Section, string> = {
   settings: "M4 7h16M4 17h16M8 4v6M16 14v6",
   billing: "M3 5h18v14H3ZM3 9h18M7 15h4",
   operator: "M3 21V8h8v13M11 21V3h10v18M6 12h2M6 16h2M14 7h4M14 11h4M14 15h4",
+  notifications: "M18 8a6 6 0 0 0-12 0v6l-2 3h16l-2-3ZM10 21h4",
 };
 export function Icon({ name }: { name: Section }) {
   return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]} /></svg>;
