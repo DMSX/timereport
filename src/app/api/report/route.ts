@@ -4,6 +4,7 @@ import { z } from "zod";
 import { apiError, HttpError, requireMember } from "@/lib/api";
 import { allRows, checked } from "@/lib/query";
 import { breakViolations, csvCell, displayTime, localTime, minutesLabel, monthRange, monthlyReport } from "@/lib/time";
+import { dayReportCells, reportNote } from "@/lib/report-display";
 
 export async function GET(request: Request) {
   try {
@@ -23,6 +24,9 @@ export async function GET(request: Request) {
       allRows((from, to) => auth.db.from("projects").select("*").eq("company_id", company).order("id").range(from, to)),
       allRows((from, to) => auth.db.from("break_resolutions").select("*").eq("company_id", company).order("entry_id").range(from, to)),
     ]);
+    if (typeof companyData.absence_tracking !== "boolean" || models.some((model) => !["hourly","scheduled"].includes(model.mode))) {
+      throw new HttpError(503, "Datenbankmigration für flexible Zeiterfassungsmodelle fehlt.");
+    }
     const report = monthlyReport(month, entries, models, absences, now);
     const blocks = entries.filter((e) => localTime(e.started_at) < end && localTime(e.ended_at ?? now.toISO()!) > start);
     const violations = breakViolations(entries, now);
@@ -42,10 +46,10 @@ export async function GET(request: Request) {
     if (format === "csv") {
       const rows: (string | number)[][] = [
         ["TimeReport", companyData.name, member.display_name, month, "Europe/Zurich"],
-        ["Hinweis", "Saldo inkl. Soll des ganzen Monats. Laufende Buchungen vorläufig. Keine automatischen Feiertage."],
-        ["Typ", "Datum", "Projekt", "Start", "Ende", "Arbeit (h:mm)", "Soll", "Ferien", "Krankheit", "Saldo", "Pausenprüfung", "Notiz"],
-        ...report.map((d) => ["Tag", d.date, "", "", "", minutesLabel(d.worked), minutesLabel(d.target), minutesLabel(d.vacation), minutesLabel(d.sick), minutesLabel(d.balance), "", ""]),
-        ...blocks.map((e) => ["Arbeitsblock", localTime(e.started_at).toISODate()!, projectName(e.project_id), displayTime(e.started_at), e.ended_at ? displayTime(e.ended_at) : "Läuft", minutesLabel(blockMinutes(e)), "", "", "", "", pauseStatus(e.id), e.note]),
+        ["Hinweis", reportNote(report)],
+        ["Typ", "Datum", "Projekt", "Start", "Ende", "Arbeit (h:mm)", "Soll", "Feriengutschrift (h:mm)", "Krankheitsgutschrift (h:mm)", "Saldo", "Ferien (Kalendertage)", "Krankheit (Kalendertage)", "Modell", "Pausenprüfung", "Notiz"],
+        ...report.map((d) => ["Tag", d.date, "", "", "", ...dayReportCells(d), "", ""]),
+        ...blocks.map((e) => ["Arbeitsblock", localTime(e.started_at).toISODate()!, projectName(e.project_id), displayTime(e.started_at), e.ended_at ? displayTime(e.ended_at) : "Läuft", minutesLabel(blockMinutes(e)), "", "", "", "", "", "", "", pauseStatus(e.id), e.note]),
       ];
       return new Response("\uFEFF" + rows.map((r) => r.map(csvCell).join(";")).join("\r\n"), {
         headers: { ...headers, "Content-Type": "text/csv; charset=utf-8" },
@@ -74,15 +78,19 @@ export async function GET(request: Request) {
     line("TimeReport | Monatsrapport", 22, true);
     line(`${companyData.name} | ${member.display_name}`, 12);
     line(`${month} | Europe/Zurich | Erstellt ${displayTime(now.toISO()!)}`);
-    line("Saldo inkl. Soll des ganzen Monats; laufende Buchungen sind vorläufig.", 9);
-    line("Feiertage werden nicht automatisch berücksichtigt.", 9);
-    if (!models.length) line("ACHTUNG: Kein Arbeitsmodell vorhanden; Sollzeit ist 0.", 10, true);
+    line(reportNote(report), 9);
+    if (report.some((d) => d.mode === null)) line("ACHTUNG: Für einzelne Tage fehlt das Modell; kein Soll oder Saldo berechnet.", 10, true);
     y -= 10;
-    line("Datum           Arbeit       Soll       Ferien       Krankheit       Saldo", 10, true);
-    for (const d of report) line(`${DateTime.fromISO(d.date).toFormat("dd.MM.yyyy")}     ${minutesLabel(d.worked)}     ${minutesLabel(d.target)}     ${minutesLabel(d.vacation)}     ${minutesLabel(d.sick)}     ${minutesLabel(d.balance)}`);
+    const hasTarget = report.some((d) => d.hasTarget);
+    line(hasTarget ? "Datum | Arbeit | Soll | Ferien/Krankheit (h) | Saldo" : "Datum | Arbeitszeit | Modell", 10, true);
+    for (const d of report) {
+      const cells = dayReportCells(d);
+      line(`${DateTime.fromISO(d.date).toFormat("dd.MM.yyyy")} | ${cells[0]} | ${d.hasTarget ? `${cells[1]} | ${cells[2]}/${cells[3]} | ${cells[4]}` : cells[7]}`);
+      if (d.vacationDays || d.sickDays) line(`Abwesenheit: Ferien ${d.vacationDays} / Krankheit ${d.sickDays} Kalendertage`, 9);
+    }
     const totals = report.reduce((sum, d) => ({ work: sum.work + d.worked, target: sum.target + d.target, credited: sum.credited + d.vacation + d.sick, balance: sum.balance + d.balance }), { work: 0, target: 0, credited: 0, balance: 0 });
     y -= 10;
-    line(`Total: Arbeit ${minutesLabel(totals.work)} | Soll ${minutesLabel(totals.target)} | Abwesenheiten ${minutesLabel(totals.credited)} | Saldo ${minutesLabel(totals.balance)}`, 10, true);
+    line(`Total: Arbeit ${minutesLabel(totals.work)}` + (hasTarget ? ` | Soll ${minutesLabel(totals.target)} | Gutschrift ${minutesLabel(totals.credited)} | Saldo (Soll-Tage) ${minutesLabel(totals.balance)}` : " | Kein Soll-/Saldovergleich"), 10, true);
     y -= 15;
     line("Projektbuchungen", 14, true);
     for (const e of blocks) {

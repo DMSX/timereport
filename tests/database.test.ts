@@ -25,9 +25,10 @@ test("PostgreSQL migration and tenant/write boundaries", async (t) => {
     `);
     await db.exec(await readFile(new URL("../supabase/migrations/202610120001_initial.sql", import.meta.url), "utf8"));
     await db.exec(await readFile(new URL("../supabase/migrations/202610120002_onboarding_alerts.sql", import.meta.url), "utf8"));
+    await db.exec(await readFile(new URL("../supabase/migrations/202610120003_flexible_work_models.sql", import.meta.url), "utf8"));
     await db.exec(`
       insert into auth.users values ('${admin}'),('${employee}'),('${outsider}'),('${operator}');
-      insert into public.companies(id,name) values ('${company}','Pilot'),('${otherCompany}','Other');
+      insert into public.companies(id,name,absence_tracking) values ('${company}','Pilot',true),('${otherCompany}','Other',true);
       insert into public.company_members(company_id,user_id,display_name,role) values
         ('${company}','${admin}','Admin','admin'),('${company}','${employee}','Employee','employee'),
         ('${otherCompany}','${outsider}','Outsider','admin');

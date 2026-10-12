@@ -2,6 +2,7 @@ export type Role = "employee" | "hr" | "admin";
 export type Company = {
   id: string; name: string; correction_weeks: number; absence_approval: boolean;
   max_work_minutes: number; min_break_minutes: number;
+  absence_tracking: boolean; report_alerts_enabled: boolean;
 };
 export type Member = {
   company_id: string; user_id: string; display_name: string; role: Role; vacation_days: number;
@@ -17,6 +18,7 @@ export type Entry = {
 };
 export type WorkModel = {
   id: string; company_id: string; user_id: string; valid_from: string;
+  mode: "scheduled" | "hourly";
   weekday_minutes: number[]; planned_start: string | null; planned_end: string | null;
 };
 export type Absence = {

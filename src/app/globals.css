@@ -92,10 +92,13 @@ summary { cursor: pointer; font-size: .8rem; font-weight: 600; padding: .9rem 0;
 .person-picker { max-width: 300px; margin-bottom: 1.5rem; }
 .setup-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; }
 .onboarding { background: #f3f8f5; border-color: #cde2d6; }
-.first-run { border-color: #80bfa9; background: #f0f8f4; }
+.first-run { background: white; }
 .first-run h2 { margin-top: 1.2rem; font-size: 1.5rem; }
 .first-run .section-heading { margin-top: 0; }
 .first-run .actions { margin-top: 1rem; }
+.wizard-content { margin: 1.2rem 0; }
+.wizard-content .card { padding: 1rem; margin-bottom: 1rem; }
+.first-run fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 1rem; }
 .onboarding .section-heading { margin-top: 0; }
 .setup-step { text-align: left; background: white; border: 1px solid #dce8df; color: var(--ink); padding: 1rem; justify-content: flex-start; align-items: flex-start; font-size: .8rem; font-weight: 400; }
 .setup-step small { display: block; color: var(--muted); font-size: .7rem; margin-top: .25rem; }

@@ -24,14 +24,16 @@ export function modelForDay(models: WorkModel[], day: string) {
   return models.filter((m) => m.valid_from <= day).sort((a, b) => b.valid_from.localeCompare(a.valid_from))[0];
 }
 
-export type DayReport = { date: string; worked: number; target: number; vacation: number; sick: number; balance: number };
+export type DayReport = { date: string; worked: number; hasTarget: boolean; mode: WorkModel["mode"] | null; target: number; vacation: number; sick: number; balance: number; vacationDays: number; sickDays: number };
 export function monthlyReport(month: string, entries: Entry[], models: WorkModel[], absences: Absence[], now: DateTime = DateTime.now()) {
   const { start, end } = monthRange(month);
   const days: DayReport[] = [];
   for (let day = start; day < end; day = day.plus({ days: 1 })) {
     const next = day.plus({ days: 1 });
     const date = day.toISODate()!;
-    const target = modelForDay(models, date)?.weekday_minutes[day.weekday - 1] ?? 0;
+    const model = modelForDay(models, date);
+    const hasTarget = model?.mode === "scheduled";
+    const target = hasTarget ? model.weekday_minutes[day.weekday - 1] : 0;
     const worked = entries.reduce((sum, entry) => {
       const from = Math.max(localTime(entry.started_at).toMillis(), day.toMillis());
       const to = Math.min(localTime(entry.ended_at ?? now.toISO()!).toMillis(), next.toMillis());
@@ -40,7 +42,11 @@ export function monthlyReport(month: string, entries: Entry[], models: WorkModel
     const matching = absences.filter((a) => a.status === "approved" && a.starts_on <= date && a.ends_on >= date);
     const vacation = matching.filter((a) => a.kind === "vacation").reduce((sum, a) => sum + target * a.fraction, 0);
     const sick = matching.filter((a) => a.kind === "sick").reduce((sum, a) => sum + target * a.fraction, 0);
-    days.push({ date, worked, target, vacation, sick, balance: worked + vacation + sick - target });
+    days.push({ date, worked, hasTarget, mode: model?.mode ?? null, target, vacation, sick,
+      balance: hasTarget ? worked + vacation + sick - target : 0,
+      vacationDays: matching.filter((a) => a.kind === "vacation").reduce((sum,a) => sum+a.fraction,0),
+      sickDays: matching.filter((a) => a.kind === "sick").reduce((sum,a) => sum+a.fraction,0),
+    });
   }
   return days;
 }
@@ -71,7 +77,8 @@ export function vacationUsed(year: number, models: WorkModel[], absences: Absenc
     let day = DateTime.fromISO(a.starts_on, { zone: ZONE });
     const end = DateTime.fromISO(a.ends_on, { zone: ZONE });
     while (day <= end) {
-      if (day.year === year && (modelForDay(models, day.toISODate()!)?.weekday_minutes[day.weekday - 1] ?? 0) > 0) used += a.fraction;
+      const model = modelForDay(models, day.toISODate()!);
+      if (day.year === year && model?.mode === "scheduled" && model.weekday_minutes[day.weekday - 1] > 0) used += a.fraction;
       day = day.plus({ days: 1 });
     }
   }

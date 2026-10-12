@@ -22,12 +22,12 @@ test("alert detection, access, half-days, queue and onboarding persistence", asy
       grant usage on schema auth to authenticated;
       grant execute on all functions in schema auth to authenticated;
     `);
-    for (const file of ["202610120001_initial.sql", "202610120002_onboarding_alerts.sql"]) {
+    for (const file of ["202610120001_initial.sql", "202610120002_onboarding_alerts.sql", "202610120003_flexible_work_models.sql"]) {
       await db.exec(await readFile(new URL(`../supabase/migrations/${file}`, import.meta.url), "utf8"));
     }
     await db.exec(`
       insert into auth.users values('${admin}'),('${employee}'),('${outsider}');
-      insert into companies(id,name) values('${company}','Test'),('${other}','Other');
+      insert into companies(id,name,absence_tracking,report_alerts_enabled) values('${company}','Test',true,true),('${other}','Other',true,true);
       insert into company_members(company_id,user_id,display_name,role) values
         ('${company}','${admin}','Admin','admin'),('${company}','${employee}','Employee','employee'),
         ('${other}','${outsider}','Other','admin');
@@ -165,6 +165,27 @@ test("alert detection, access, half-days, queue and onboarding persistence", asy
       assert.equal((await asUser(admin, "select * from onboarding_progress")).length, 0);
       await assert.rejects(asUser(employee, "insert into onboarding_progress(user_id,scope) values($1,$2)", [employee,other]), /row-level security/);
       assert.equal((await asUser(employee, "select * from onboarding_progress", [], "aal1")).length, 0);
+    });
+    await t.test("hourly models reject hidden targets and suppress detection even with enabled rules", async () => {
+      await assert.rejects(asUser(admin, "update work_models set mode='hourly'"), /hourly_without_target/);
+      await assert.rejects(asUser(employee, "insert into work_models(company_id,user_id,valid_from,mode,weekday_minutes) values($1,$2,'2026-10-01','hourly',array[0,0,0,0,0,0,0])", [company,employee]), /row-level security/);
+      await asUser(admin, "insert into work_models(company_id,user_id,valid_from,mode,weekday_minutes) values($1,$2,'2026-10-01','hourly',array[0,0,0,0,0,0,0])", [company,employee]);
+      assert.equal((await condition()).length,0);
+      assert.equal((await condition("2026-09-30")).length,1);
+      await asUser(admin,"insert into work_models(company_id,user_id,valid_from,weekday_minutes,planned_start) values($1,$2,'2020-01-01',array[480,480,480,480,480,480,480],'08:00')",[company,admin]);
+      await asUser(admin,"insert into report_settings(company_id,user_id,responsible_id,delay_minutes,enabled) values($1,$2,$2,120,true)",[company,admin]);
+      assert.equal((await db.query("select * from report_condition($1,$2,'2026-10-12')",[company,admin])).rows.length,1);
+      await db.exec("select refresh_report_alerts()");
+      assert.equal((await db.query("select * from report_alerts where status='open' and work_day>='2026-10-01' and user_id=$1",[employee])).rows.length,0);
+      await db.exec("delete from work_models where mode='hourly'");
+    });
+    await t.test("company features are optional and disabling absence capture preserves history", async () => {
+      await db.exec("update companies set report_alerts_enabled=false");
+      assert.equal((await condition()).length,0);
+      await db.exec("update companies set report_alerts_enabled=true,absence_tracking=false");
+      await assert.rejects(asUser(admin,"select request_absence($1,'sick','2026-12-02','2026-12-02',1)",[company]), /deaktiviert/);
+      assert.ok((await asUser(admin,"select * from absences")).length>0);
+      await db.exec("update companies set absence_tracking=true");
     });
   } finally { await db.close(); }
 });

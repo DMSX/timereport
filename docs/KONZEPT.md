@@ -10,7 +10,7 @@
 TimeReport soll kleinen Unternehmen und Teams eine einfach bedienbare,
 projektbezogene Zeiterfassung bieten. Mitarbeitende starten und beenden ihre
 Arbeitszeit per Knopfdruck. Die Anwendung ordnet Arbeitsblöcke Projekten zu,
-vergleicht sie mit dem individuellen Soll und erstellt Monatsrapporte.
+erstellt Monatsrapporte und vergleicht Zeiten nur bei ausdrücklich gewähltem Soll-Modell mit dem individuellen Soll.
 Firmen verwalten ihre Mitarbeitenden, Projekte und Arbeitsregeln selbst.
 
 Das Produkt wird als browserbasierte Software mit einem monatlichen
@@ -102,6 +102,19 @@ nachgetragen werden.
 
 ### 5.2 Sollzeit und Arbeitsmodelle
 
+Das Zeiterfassungsmodell ist **pro Person wählbar**, unabhängig von
+Unternehmensgrösse oder Rolle. Stundenbasis erfasst ausschliesslich Iststunden:
+kein Soll, keine Minus-/Überstundenbewertung und keine automatische Prüfung
+fehlender Buchungen. Ein Modellwechsel gilt ab einem Datum und schreibt
+historische Auswertungen nicht pauschal um.
+
+Abwesenheiten und Fehlbuchungshinweise sind separate Firmenoptionen; es gibt
+kein starres Solo-/Team-Paket. So können auch mehrere Personen ohne
+Personalprozesse einfach Stunden buchen. Neue Arbeitsbereiche starten ohne
+beide Zusatzfunktionen, bestehende behalten ihre Einstellung. Abschalten
+löscht keine historischen Einträge. Das geschützte Mandantenmodell bleibt.
+
+**Nur bei einem Soll-Modell:**
 Die Wochen-Sollzeit wird pro Person über die Verteilung auf sieben Wochentage
 festgelegt. Die Oberfläche verwendet Stunden; die Datenbank speichert Minuten.
 Arbeitsmodelle haben ein Gültigkeitsdatum, sodass Änderungen historisch
@@ -143,7 +156,7 @@ Abschluss- und Freigabeprozess wäre eine zusätzliche Funktion.
 
 ### 5.5 Ferien und Krankheit
 
-Ferien werden gegen ein Jahresguthaben in Tagen ausgewertet.
+Bei Soll-Modellen werden Ferien gegen ein Jahresguthaben in Tagen ausgewertet.
 Ganze Tage, halbe Tage und Datumsbereiche sind möglich.
 Krankheit wird getrennt erfasst und besitzt kein begrenztes Guthaben.
 
@@ -152,13 +165,20 @@ Ohne Genehmigungspflicht werden neue Einträge direkt genehmigt.
 Nur genehmigte Abwesenheiten werden in der Soll-/Ist-Auswertung gutgeschrieben;
 offene Ferienanträge reservieren bereits Guthaben.
 
+Bei Stundenbasis werden aktivierte Abwesenheiten dokumentiert, aber ohne
+Stunden- oder Ferienrestberechnung, da keine erwarteten Arbeitstage vorliegen.
+Ferienlohn und variable Arbeitspensen sind keine Funktionen dieser Pilotversion.
+
 Für den marktfähigen Ausbau sind insbesondere jahresspezifische Ferienkonten,
 Überträge, Ein-/Austritte, Teilzeitberechnung und kantonale Feiertage zu klären.
 
 ### 5.6 Monatsrapporte
 
-Der Monatsrapport enthält Tageswerte für Arbeit, Soll, Ferien, Krankheit und
-Saldo sowie die zugehörigen Projektbuchungen. Exportformate sind PDF und CSV
+Der Monatsrapport enthält Iststunden und Projektbuchungen. Soll und Saldo
+werden nur für die Tage mit gültigem Soll-Modell ausgewertet. Stundenbasis
+erzeugt keine positiven oder negativen Salden. Optional dokumentierte
+Abwesenheiten stehen als Kalendertage und auf Soll-Tagen als Stundengutschriften
+im Rapport. Exportformate sind PDF und CSV
 für die Weiterverarbeitung in Excel.
 
 Monatsgrenzen und Zeitumstellungen werden in der Zeitzone Zürich berücksichtigt.
@@ -242,7 +262,7 @@ und mit echten Testkonten abgenommen werden. Details stehen im README.
 | Firmenaufnahme | Der Betreiber legt eine Firma an und bestimmt ihren Admin. |
 | Sicherer Einstieg | Benutzer bestätigen ihre Einladung, richten Authenticator-2FA ein und setzen ein Passwort. |
 | Einrichtung | Die Oberfläche führt durch Arbeitsmodelle, erstes Projekt und Teamzuweisung. |
-| Tägliche Nutzung | „Mein Arbeitstag“ zeigt die laufende Uhr, Tageszeit, Soll und Fortschritt. Projekt wählen, einchecken, für Pause oder Feierabend auschecken. |
+| Tägliche Nutzung | „Mein Arbeitstag“ zeigt Uhr und Istzeit; Soll und Fortschritt nur bei einem Soll-Modell. Projekt wählen, einchecken, für Pause oder Feierabend auschecken. |
 | Prüfung | Buchungen und Abwesenheiten werden in eigenen Bereichen geprüft. Änderungen erfolgen in fokussierten Dialogen. |
 | Monatsende | HR/Admin beziehungsweise Mitarbeitende erstellen den zulässigen PDF-/CSV-Auszug. |
 
@@ -256,7 +276,7 @@ nicht nur über ausgeblendete Schaltflächen.
 
 Jeder neue Benutzer soll einen schrittweisen Einrichtungsassistenten erhalten,
 vergleichbar mit der Ersteinrichtung eines neuen Geräts: ein Schritt pro
-Ansicht, verständliche Erklärung, sichtbarer Fortschritt sowie Zurück und
+Modal, verständliche Erklärung, sichtbarer Fortschritt sowie Zurück und
 Weiter. Der Fortschritt wird dauerhaft gespeichert und lässt sich nach einer
 Unterbrechung auf einem anderen Gerät fortsetzen. Eine Übersicht am Ende zeigt,
 was eingerichtet wurde und welche Schritte noch von Verantwortlichen abhängen.
@@ -282,10 +302,14 @@ Im Alltag lässt sich die Hilfe erneut öffnen, ohne Konfiguration zurückzusetz
 
 **Aktueller Stand:** Login-/2FA-Schritte, Einrichtungsliste und ein
 rollenabhängiger Assistent mit dauerhaft gespeichertem Fortschritt sind
-im Pilotcode implementiert. Der Assistent führt zu den tatsächlichen
-Konfigurationsbereichen, ohne Einstellungen selbstständig zu überschreiben.
+im Pilotcode implementiert. Der Assistent enthält die echten Formulare
+direkt im Modal, statt auf andere Seiten zu verweisen. Firmen-Admins
+wählen Funktionen, speichern pro Person Stundenbasis oder Soll und erstellen
+Projekte samt Zuweisungen direkt darin. Mitarbeitende erhalten eine Einführung
+ohne unberechtigte Konfigurationsrechte. HR kann das eigene Modell bearbeiten.
 Erforderliche Arbeitsmodelle und Projektzuweisungen blockieren den Abschluss,
-solange sie fehlen. Hinweise sind eine explizit aktivierbare Firmenoption.
+solange sie fehlen; Stundenbasis ist ein gültiges Modell ohne Soll.
+Abwesenheiten und Hinweise sind explizit aktivierbare Firmenoptionen.
 
 ## 7. Technisches Konzept
 

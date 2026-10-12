@@ -1,6 +1,6 @@
 # TimeReport
 
-Erste Pilotversion einer mandantenfähigen Zeiterfassung für Schweizer Teams:
+Erste Pilotversion einer mandantenfähigen Zeiterfassung für Selbstständige und Schweizer Teams:
 Next.js / TypeScript, PostgreSQL mit Supabase Auth und Stripe-Firmenabos.
 
 Das [Produkt- und Umsetzungskonzept](docs/KONZEPT.md) beschreibt Zielbild,
@@ -31,10 +31,11 @@ npm run dev
    SQL-Editor ausführen. Die Anwendung verwendet das öffentliche Schema dieses
    Projekts; die Migration ist nicht für eine bereits anderweitig genutzte
    Datenbank gedacht.
-   Bei einer Neuinstallation anschliessend auch
-   `supabase\migrations\202610120002_onboarding_alerts.sql` ausführen.
-   **Bei einer bereits eingerichteten Pilotdatenbank nur diese zweite
-   Migration einmal ausführen**, nicht die erste wiederholen.
+   Bei einer Neuinstallation anschliessend
+   `supabase\migrations\202610120002_onboarding_alerts.sql` und
+   `supabase\migrations\202610120003_flexible_work_models.sql` in dieser Reihenfolge ausführen.
+   **Bestehende Installationen führen nur die noch fehlenden Migrationen
+   einmal in Reihenfolge aus**, nicht bereits angewendete wiederholen.
 2. Projekt-URL und Publishable Key in `.env.local` hinterlegen. Der
    `SUPABASE_SERVICE_ROLE_KEY` ist nur für serverseitige Einladungen,
    Firmenaufnahme und Stripe-Synchronisation bestimmt. Niemals als
@@ -91,25 +92,50 @@ ungeprüften Selbstbedienungslink. Keine Recovery-Codes im Repository ablegen.
 Vor Verkauf ist dieser Supportprozess mit Verantwortlichkeiten und
 Nachweisführung verbindlich festzulegen.
 
+### Schutz der Anmeldedaten
+
+Passwort-, TOTP- und Passwortänderungsformulare sind getrennte DOM-Instanzen
+mit eindeutigen Feld-IDs. Beim erfolgreichen Login wird das Passwortformular
+geleert; das kontrollierte TOTP-Feld beginnt leer und akzeptiert nur sechs
+Ziffern. Ein Passwort wird nicht als Authenticator-Code übernommen.
+Die `autocomplete`-Angaben unterstützen Passwortmanager, können deren
+externes Verhalten aber nicht garantieren.
+
+Verbindungen zu externen Supabase-Instanzen benötigen HTTPS; nur lokale
+Loopback-Adressen dürfen für Entwicklungsinstanzen HTTP verwenden.
+Die veröffentlichte Anwendung selbst muss ebenfalls ausschliesslich über
+HTTPS erreichbar sein; dies wird beim Hosting eingerichtet.
+Passwörter werden nicht von TimeReport gespeichert. Supabase Auth speichert
+laut [Passwortsicherheitsdokumentation](https://supabase.com/docs/guides/auth/password-security)
+gesalzene bcrypt-Hashes, keine entschlüsselbaren Passwörter. Transportverschlüsselung,
+Passwort-Hashing und 2FA sind unterschiedliche Schutzmassnahmen; ein
+zusätzlicher clientseitiger Verschlüsselungsschritt ersetzt diese nicht.
+
 ## Arbeitsregeln
 
 ### Oberfläche und Einstieg
 
 Nach dem Login öffnet sich **Mein Arbeitstag** mit eigener Tageszeit,
-Tagessoll, Wochenzeit bis heute und Ein-/Auschecken. Neue Firmen-Admins sehen
+Wochenzeit bis heute und Ein-/Auschecken. Soll und Tagesfortschritt erscheinen
+nur bei einem Soll-Modell. Neue Firmen-Admins sehen
 eine Einrichtungshilfe: Arbeitsmodelle hinterlegen, Projekt erstellen und
 Team zuweisen. Betreiber ohne Firma erhalten einen eigenen Einstieg zur
 Firmenaufnahme, statt einer leeren Zeiterfassung.
 
-Der Ersteinrichtungsassistent ergänzt diese Liste mit einer gespeicherten
-Schrittfolge für Betreiber, Firmen-Admins und Mitarbeitende/HR. Mit **Später
+Der Ersteinrichtungsassistent ist ein **Modal mit direkten Formularen**:
+Arbeitsbereich anlegen, Funktionen auswählen, Zeiterfassungsmodell pro Person
+speichern, Projekte erstellen und Personen zuweisen – ohne Seitenwechsel.
+Betreiber, Firmen-Admins und Mitarbeitende/HR erhalten rollenabhängige Schritte. Mit **Später
 fortsetzen** kann die Führung vorübergehend ausgeblendet werden; der letzte
 gespeicherte Schritt bleibt erhalten. **Einführung öffnen** startet die Führung
 erneut, ohne Arbeitsdaten oder Firmeneinstellungen zurückzusetzen.
 Arbeitsmodell und Projektzuweisung sind für den Abschluss erforderliche
-Voraussetzungen. Firmenregeln und die optionale Aktivierung von Hinweisen
-werden ausdrücklich erklärt; es werden keine unsichtbaren Defaults oder
-Tutorial-Arbeitsbuchungen erzeugt. Login und 2FA bleiben unabhängig vom
+Voraussetzungen; Stundenbasis zählt als vollständiges Modell ohne Soll.
+Neue Arbeitsbereiche starten ohne Abwesenheitserfassung und Fehlbuchungshinweise.
+Bestehende Arbeitsbereiche behalten ihre bisherigen Funktionen.
+Die Modellauswahl ist zunächst **Stundenbasis**, wird jedoch erst beim
+ausdrücklichen Speichern angewendet. Es gibt keine Tutorial-Arbeitsbuchungen.
+Login und 2FA bleiben unabhängig vom
 Assistenten verpflichtend.
 
 Die Seitennavigation trennt Arbeitsplatz (Arbeitstag, Zeitbuchungen,
@@ -123,7 +149,7 @@ Abwesenheiten, Einladungen, Projekte und Firmen öffnen sich in Dialogen mit
 Fokusführung und Escape zum Schliessen. Fehler bleiben im Dialog sichtbar,
 ohne eingegebene Werte zu verlieren. Team- und Projektlisten sind durchsuchbar;
 Bearbeitungsformulare werden nur bei Bedarf aufgeklappt. Arbeitsmodelle werden
-in Stunden eingegeben und zeigen das Wochen-Soll live an; die Datenbank
+bei gewähltem Soll-Modell in Stunden eingegeben und zeigen das Wochen-Soll live an; die Datenbank
 speichert weiterhin volle Minuten.
 
 | Bereich | Verhalten |
@@ -135,12 +161,15 @@ speichert weiterhin volle Minuten.
 | Pause | Auschecken beendet einen Arbeitsblock. Die Lücke vor dem nächsten Block zählt als Pause. Projektwechsel setzt die durchgehende Arbeitszeit nicht zurück. |
 | Pausenregeln | Firmenregel plus strengere Projektregel; Regeln werden beim Einchecken gespeichert. Änderungen gelten für neue Blöcke. Eine kurze Pause setzt die Arbeitszeit nicht zurück. |
 | Verstösse | Arbeitszeit wird vollständig weiter erfasst. HR/Admin klärt abgeschlossene Verstösse mit Grund. Korrekturen verwerfen betroffene spätere Klärungen, damit sie erneut geprüft werden. |
-| Sollzeit | Minuten je Wochentag pro Person; Summe entspricht Wochen-Soll. Modelle sind ab Datum gültig bis zum nächsten Modell. Geplante Uhrzeiten sind informativ. |
+| Zeiterfassungsmodell | Pro Person Stundenbasis ohne Soll oder Modell mit Soll. Ab Datum gültig bis zum nächsten Modell; historische Rapporte bleiben dem damals gültigen Modell zugeordnet. |
+| Stundenbasis | Tatsächlich erfasste Arbeitsstunden, keine Soll-Erfüllung oder Plus-/Minuszeit und keine automatische Fehlbuchungsprüfung. Abwesenheiten nur dokumentiert, keine automatischen Stunden-/Ferienlohnansprüche. |
+| Sollzeit | Optional: Minuten je Wochentag pro Person; Summe entspricht Wochen-Soll. Geplante Uhrzeiten dienen aktivierten Hinweisen, starten keine Buchungen. |
+| Optionale Funktionen | Abwesenheitserfassung und Fehlbuchungshinweise getrennt je Arbeitsbereich an-/abschaltbar, unabhängig von der Anzahl Personen. Abschalten löscht keine Historie. |
 | Korrekturen | Standard: bis Sonntag der Folgewoche, 23:59 Uhr Zürich. Frist je Firma 0–8 zusätzliche Wochen; danach nur HR/Admin. Änderungen und manuelle Nachträge mit Gründen werden protokolliert. Ein Verschieben in eine bereits gesperrte Woche ist ebenfalls gesperrt. Nachträge verwenden aktuelle Pausenregeln. |
-| Ferien | Jahresguthaben in Tagen pro Person; ganze/halbe Tage oder Datumsbereiche. Offene und genehmigte Anträge reservieren Guthaben auf geplanten Arbeitstagen. Negative Restguthaben sind sichtbar, werden im Pilot nicht automatisch blockiert. |
+| Ferien | Bei Soll-Modellen Jahresguthaben in Tagen pro Person; offene und genehmigte Anträge reservieren Guthaben auf geplanten Arbeitstagen. Ohne geplante Arbeitstage keine automatische Ferienrestberechnung. Keine Lohnabrechnung. |
 | Krankheit | Separater Abwesenheitstyp, ohne begrenztes Guthaben. |
 | Freigaben | Je Firma optional; bei ausgeschalteter Freigabe sind neue Anträge direkt genehmigt. Bestehende offene Anträge bleiben offen. |
-| Abwesenheiten | Nur genehmigte Abwesenheiten werden mit den jeweiligen geplanten Minuten gutgeschrieben. Überschneidende Abwesenheiten sind gesperrt; historische Selbstbuchungen unterliegen der Korrekturfrist. |
+| Abwesenheiten | Neue Einträge nur bei aktivierter Funktion. Genehmigte Abwesenheiten bleiben im Rapport dokumentiert, Stunden nur auf Soll-Tagen gutgeschrieben. Überschneidungen gesperrt; historische Selbstbuchungen unterliegen der Korrekturfrist. |
 | Rapporte | Tagesübersicht und Projektbuchungen in PDF/CSV, Zeitzone Zürich; Monatsgrenzen und Sommer-/Winterzeit berücksichtigen tatsächliche verstrichene Minuten. |
 | Fehlende Zeiterfassung | Je Person aktivierbare Prüffrist nach geplantem Arbeitsbeginn; zuständige HR-/Admin-Person derselben Firma. Hinweise und manuelle Erinnerungen stehen unter **Hinweise**. |
 | Halbtage | Neue Einträge benötigen Vormittag/Nachmittag. HR/Admin kann alte Einträge mit Änderungsgrund zuordnen. Das geplante Zeitfenster wird für Halbtage in zwei gleich lange Hälften geteilt. |
@@ -151,9 +180,9 @@ konfigurierbare Geschäftsregel, keine vollständige gesetzliche Pausenregel.
 
 ## Hinweise und E-Mail-Erinnerungen aktivieren
 
-1. Die zweite SQL-Migration ausführen und den Entwicklungsserver nach
-   Konfigurationsänderungen neu starten.
-2. Unter **Team → Arbeitsmodell** den geplanten Arbeitsbeginn hinterlegen.
+1. Fehlende SQL-Migrationen ausführen; unter **Firmenregeln** die Hinweise
+   ausdrücklich aktivieren. Nach Änderungen der Serverkonfiguration neu starten.
+2. Unter **Team → Arbeitsmodell** ein **Soll-Modell** und den geplanten Arbeitsbeginn hinterlegen.
    Für Halbtage zusätzlich das geplante Ende setzen. Tagesfenster mit Ende
    vor Beginn werden nicht als Halbtags-Schichtplan interpretiert, sondern
    erzeugen einen Klärungshinweis.

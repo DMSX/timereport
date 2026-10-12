@@ -3,11 +3,12 @@ import assert from "node:assert/strict";
 import { DateTime } from "luxon";
 import { breakViolations, correctionDeadline, csvCell, minutesLabel, monthRange, monthlyReport, vacationUsed } from "../src/lib/time";
 import type { Absence, Entry, WorkModel } from "../src/lib/types";
+import { dayReportCells, reportNote } from "../src/lib/report-display";
 
 function entry(id: string, start: string, end: string | null, project = "project"): Entry {
   return { id, company_id: "company", user_id: "user", project_id: project, started_at: start, ended_at: end, note: "", max_work_minutes: 120, min_break_minutes: 15 };
 }
-const model: WorkModel = { id: "model", company_id: "company", user_id: "user", valid_from: "2026-01-01", weekday_minutes: [480, 480, 480, 480, 480, 0, 0], planned_start: null, planned_end: null };
+const model: WorkModel = { id: "model", company_id: "company", user_id: "user", valid_from: "2026-01-01", mode: "scheduled", weekday_minutes: [480, 480, 480, 480, 480, 0, 0], planned_start: null, planned_end: null };
 const absence = (kind: Absence["kind"], status: Absence["status"], start = "2026-10-05", end = start): Absence => ({
   id: "absence", company_id: "company", user_id: "user", kind, status, starts_on: start, ends_on: end, fraction: 1,
 });
@@ -68,4 +69,28 @@ test("CSV quotes content and prevents spreadsheet formula execution", () => {
 test("invalid months cannot silently generate empty reports", () => {
   assert.throws(() => monthRange("2026-13"));
   assert.throws(() => monthRange("wrong"));
+});
+
+test("hourly work has no target or balance and absences remain documented without credits", () => {
+  const hourly: WorkModel = {...model,mode:"hourly",weekday_minutes:[0,0,0,0,0,0,0]};
+  const report = monthlyReport("2026-10",[entry("work","2026-10-05T08:00:00+02:00","2026-10-05T11:00:00+02:00")],[hourly],[absence("sick","approved")]);
+  assert.equal(report[4].worked,180);
+  assert.equal(report[4].hasTarget,false);
+  assert.equal(report[4].balance,0);
+  assert.equal(report[4].sick,0);
+  assert.equal(report[4].sickDays,1);
+  assert.deepEqual(dayReportCells(report[4]),["3:00","","","","",0,1,"Stundenbasis ohne Soll"]);
+  assert.match(reportNote(report),/ohne Soll\/Saldo/);
+});
+test("effective-dated changes preserve historical targets without counting hourly work as overtime",()=>{
+  const hourly: WorkModel = {...model,id:"hourly",valid_from:"2026-10-06",mode:"hourly",weekday_minutes:[0,0,0,0,0,0,0]};
+  const report=monthlyReport("2026-10",[entry("work","2026-10-06T08:00:00Z","2026-10-06T10:00:00Z")],[model,hourly],[]);
+  assert.equal(report[4].target,480);
+  assert.equal(report[4].balance,-480);
+  assert.equal(report[5].worked,120);
+  assert.equal(report[5].hasTarget,false);
+  assert.equal(report[5].balance,0);
+  const unknown=monthlyReport("2026-10",[],[],[])[0];
+  assert.equal(unknown.mode,null);
+  assert.equal(unknown.hasTarget,false);
 });

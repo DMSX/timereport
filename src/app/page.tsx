@@ -12,7 +12,7 @@ export default function Home() {
         <h2>Die Grundlage ist bereit – die Datenbank fehlt noch.</h2>
         <p>Diese Ansicht speichert keine Daten und enthält keine echten Mitarbeitenden.</p>
         <ol>
-          <li>Supabase-Projekt erstellen und beide Migrationen aus <code>supabase\migrations</code> der Reihe nach ausführen.</li>
+          <li>Supabase-Projekt erstellen und alle Migrationen aus <code>supabase\migrations</code> der Reihe nach ausführen.</li>
           <li><code>.env.example</code> nach <code>.env.local</code> kopieren und die Supabase-Schlüssel eintragen.</li>
           <li>Ersten Betreiber und die Pilotfirma gemäss README einrichten.</li>
         </ol>

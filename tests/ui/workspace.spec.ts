@@ -1,8 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
-import type { ReportAlert, EmailJob } from "../../src/lib/types";
+import type { ReportAlert, EmailJob, WorkModel, Project } from "../../src/lib/types";
 
 // Network-isolated fixtures: these tests must never read or mutate cloud data.
-async function workspace(page: Page, role: "admin" | "employee" | "operator" = "admin", ready = false, firstRun = false, withAlert = false) {
+async function workspace(page: Page, role: "admin" | "employee" | "operator" = "admin", ready = false, firstRun = false, withAlert = false, hourly = false, minimal = false) {
   const claims = { sub: "test-user", aal: "aal2", exp: Math.floor(Date.now() / 1000) + 3600, amr: [{ method: "password", timestamp: 1 }, { method: "totp", timestamp: 2 }] };
   const token = `e30.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.test`;
   await page.context().addCookies([{
@@ -13,9 +13,13 @@ async function workspace(page: Page, role: "admin" | "employee" | "operator" = "
       user: { id: "test-user", email: "test@example.invalid", factors: [{ id: "f", factor_type: "totp", status: "verified" }] },
     })).toString("base64url"),
   }]);
-  const company = { id: "company", name: "Studio Beispiel", correction_weeks: 1, absence_approval: true, max_work_minutes: 120, min_break_minutes: 15 };
+  let company = { id: "company", name: "Studio Beispiel", correction_weeks: 1, absence_approval: true, max_work_minutes: 120, min_break_minutes: 15, absence_tracking: !minimal, report_alerts_enabled: !minimal };
   const member = { company_id: "company", user_id: "test-user", display_name: "Alex Beispiel", role, vacation_days: 25 };
   const project = { id: "project", company_id: "company", name: "Website Relaunch", active: true, max_work_minutes: null, min_break_minutes: null };
+  let projects: Project[] = ready ? [project] : [];
+  let assignments = ready ? [{project_id:"project",user_id:"test-user",company_id:"company"}] : [];
+  let models: WorkModel[] = ready ? [{ id:"model",company_id:"company",user_id:"test-user",valid_from:"2020-01-01",mode:hourly ? "hourly" : "scheduled",
+    weekday_minutes:hourly ? [0,0,0,0,0,0,0] : [480,480,480,480,480,0,0],planned_start:null,planned_end:null }] : [];
   let running: object[] = [];
   let progress = firstRun ? [] : [{ user_id: "test-user", scope: role === "operator" ? "operator" : "company", step: 0, completed: true }];
   let absences: object[] = [];
@@ -33,6 +37,22 @@ async function workspace(page: Page, role: "admin" | "employee" | "operator" = "
   await page.route("https://ui-fixture.supabase.co/**", async (route) => {
     const url = new URL(route.request().url());
     const resource = url.pathname.split("/").at(-1);
+    if (resource === "companies" && route.request().method() === "PATCH") {
+      company = {...company,...route.request().postDataJSON()};
+      await route.fulfill({json:company}); return;
+    }
+    if (resource === "work_models" && route.request().method() === "POST") {
+      models = [{id:"model",...route.request().postDataJSON()}];
+      await route.fulfill({json:models}); return;
+    }
+    if (resource === "projects" && route.request().method() === "POST") {
+      projects = [{id:"project",active:true,...route.request().postDataJSON()}];
+      await route.fulfill({json:projects}); return;
+    }
+    if (resource === "project_members" && route.request().method() === "POST") {
+      assignments = [route.request().postDataJSON()];
+      await route.fulfill({json:assignments}); return;
+    }
     if (resource === "onboarding_progress" && route.request().method() === "POST") {
       progress = [route.request().postDataJSON()];
       await route.fulfill({ json: progress }); return;
@@ -71,9 +91,7 @@ async function workspace(page: Page, role: "admin" | "employee" | "operator" = "
       company_members: role === "operator" ? [] : [member],
       operators: role === "operator" ? [{ user_id: "test-user" }] : [],
       subscriptions: [{ company_id: "company", status: "pilot", complimentary: true }],
-      projects: ready ? [project] : [],
-      project_members: ready ? [{ project_id: "project", user_id: "test-user", company_id: "company" }] : [],
-      work_models: ready ? [{ id: "model", company_id: "company", user_id: "test-user", valid_from: "2020-01-01", weekday_minutes: [480, 480, 480, 480, 480, 0, 0], planned_start: null, planned_end: null }] : [],
+      projects, project_members:assignments, work_models:models,
       time_entries: running, absences, break_resolutions: [],
       report_settings: [], report_alerts: alerts, email_outbox: jobs, company_holidays: [],
       onboarding_progress: progress, scheduler_status: [{ id: 1, last_checked_at: null }],
@@ -91,6 +109,7 @@ test("admin onboarding leads to separate team and project areas", async ({ page 
   await page.getByRole("button", { name: /Arbeitszeiten festlegen/ }).click();
   await expect(page.getByRole("heading", { name: "Team", exact: true })).toBeVisible();
   await page.getByText("Arbeitsmodell hinterlegen", { exact: true }).click();
+  await page.getByRole("combobox",{name:"Zeiterfassungsmodell",exact:true}).selectOption("scheduled");
   await expect(page.getByText("40:00", { exact: false })).toBeVisible();
   await page.getByLabel("Montag", { exact: true }).fill("6");
   await expect(page.getByText("38:00", { exact: false })).toBeVisible();
@@ -164,16 +183,64 @@ test("failed invitations keep input and show the error inside the dialog", async
 
 test("first-run wizard resumes saved progress and blocks missing prerequisites", async ({ page }) => {
   await workspace(page, "admin", false, true);
-  const wizard = page.getByRole("region", { name: "Einrichtungsassistent" });
+  const wizard = page.getByRole("dialog", { name: "Deinen Arbeitsplatz einrichten" });
   await expect(wizard.getByRole("heading", { name: "Willkommen in deinem Arbeitsplatz" })).toBeVisible();
   await wizard.getByRole("button", { name: "Weiter", exact: true }).click();
-  await expect(wizard.getByRole("heading", { name: "Firmenregeln festlegen" })).toBeVisible();
+  await expect(wizard.getByRole("heading", { name: "Deine Funktionen auswählen" })).toBeVisible();
   await page.reload();
-  await expect(wizard.getByRole("heading", { name: "Firmenregeln festlegen" })).toBeVisible();
+  await expect(wizard.getByRole("heading", { name: "Deine Funktionen auswählen" })).toBeVisible();
+  await wizard.getByRole("checkbox",{name:"Abwesenheiten erfassen",exact:true}).uncheck();
+  await wizard.getByRole("checkbox",{name:"Hinweise bei fehlender Zeiterfassung verwenden"}).uncheck();
+  await wizard.getByRole("button",{name:"Funktionen und Regeln speichern"}).click();
   await wizard.getByRole("button", { name: "Verstanden / Weiter" }).click();
   await expect(wizard.getByRole("button", { name: "Voraussetzung noch offen" })).toBeDisabled();
-  await wizard.getByRole("button", { name: "Diesen Schritt öffnen" }).click();
-  await expect(page.getByRole("heading", { name: "Team", exact: true })).toBeVisible();
+  await expect(wizard.getByRole("combobox",{name:"Zeiterfassungsmodell",exact:true})).toHaveValue("hourly");
+  await expect(wizard.getByLabel("Montag",{exact:true})).toHaveCount(0);
+  await wizard.getByRole("button",{name:"Arbeitsmodell speichern"}).click();
+  await wizard.getByRole("button",{name:"Weiter",exact:true}).click();
+  await expect(wizard.getByRole("heading",{name:"Projekte und Personen verbinden"})).toBeVisible();
+  await wizard.getByLabel("Projektname",{exact:true}).fill("Eigene Arbeit");
+  await wizard.getByRole("button",{name:"Projekt erstellen",exact:true}).click();
+  await wizard.getByRole("checkbox",{name:"Alex Beispiel",exact:true}).click();
+  await expect(wizard.getByRole("checkbox",{name:"Alex Beispiel",exact:true})).toBeChecked();
+  await wizard.getByRole("button",{name:"Weiter",exact:true}).click();
+  await wizard.getByRole("button",{name:"Verstanden / Weiter",exact:true}).click();
+  await wizard.getByRole("button",{name:"Einrichtung abschliessen"}).click();
+  await expect(wizard).toHaveCount(0);
+  await expect(page.getByRole("heading",{name:"Stundenbasis",exact:true})).toBeVisible();
+  await expect(page.getByRole("link",{name:"Abwesenheiten",exact:true})).toHaveCount(0);
+  await expect(page.getByRole("link",{name:"Hinweise",exact:true})).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("hourly users see only actual hours without target progress or monthly balance",async({page})=>{
+  await workspace(page,"employee",true,false,false,true,true);
+  await expect(page.getByRole("heading",{name:"Stundenbasis",exact:true})).toBeVisible();
+  await expect(page.getByRole("progressbar",{name:"Erfülltes Tagessoll"})).toHaveCount(0);
+  await page.getByRole("combobox",{name:"Projekt",exact:true}).selectOption("project");
+  await page.getByRole("button",{name:"Einchecken",exact:true}).click();
+  await expect(page.getByText("Zeiterfassung läuft",{exact:true})).toBeVisible();
+  await page.getByRole("link",{name:"Monatsrapport",exact:true}).click();
+  await expect(page.getByRole("columnheader",{name:"Soll",exact:true})).toHaveCount(0);
+  await expect(page.getByRole("columnheader",{name:"Saldo",exact:true})).toHaveCount(0);
+  await expect(page.getByRole("columnheader",{name:"Ferien (Tage)",exact:true})).toHaveCount(0);
+  await expect(page.getByRole("link",{name:"PDF herunterladen"})).toBeVisible();
+});
+
+test("setup modal fits mobile and can be dismissed and resumed",async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await workspace(page,"admin",false,true);
+  const dialog=page.getByRole("dialog",{name:"Deinen Arbeitsplatz einrichten"});
+  await expect(dialog).toBeVisible();
+  const bounds=await dialog.boundingBox();
+  expect(bounds!.width).toBeLessThanOrEqual(390);
+  await dialog.getByRole("button",{name:"Weiter",exact:true}).click();
+  await expect(dialog.getByRole("textbox",{name:"Firmenname",exact:true})).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await page.getByRole("button",{name:"Einrichtung fortsetzen",exact:true}).click();
+  await expect(dialog.getByRole("heading",{name:"Deine Funktionen auswählen",exact:true})).toBeVisible();
 });
 
 test("half-day requests carry their time window and appear in the absence list", async({page})=>{
