@@ -3,6 +3,9 @@
 Erste Pilotversion einer mandantenfähigen Zeiterfassung für Schweizer Teams:
 Next.js / TypeScript, PostgreSQL mit Supabase Auth und Stripe-Firmenabos.
 
+Das [Produkt- und Umsetzungskonzept](docs/KONZEPT.md) beschreibt Zielbild,
+Geschäftsmodell, Architektur und die Entscheidungsvorlage für den Pilotbetrieb.
+
 **Noch kein produktionsfertiger SaaS-Verkaufsbetrieb.** Ohne Konfiguration zeigt die
 Anwendung ausschliesslich eine Einrichtungsseite, keine simulierte Zeiterfassung.
 Supabase, E-Mail-Zustellung und Stripe müssen vor dem ersten echten Einsatz
