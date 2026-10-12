@@ -165,6 +165,44 @@ Laufende Buchungen bleiben vorläufig; der Monats-Saldo berücksichtigt
 gegenwärtig auch das Soll zukünftiger Tage im gewählten Monat.
 Der Export ist kein Lohnabrechnungs- oder Rechnungsbeleg.
 
+### 5.7 Hinweise bei fehlender Zeiterfassung (geplant)
+
+An vorgesehenen Arbeitstagen soll das System erkennen, wenn eine Person bis
+zu einem festgelegten Prüfzeitpunkt noch keine Arbeitszeit erfasst hat und
+keine passende Abwesenheit vorliegt. Die dafür verantwortliche Person erhält
+einen Hinweis und kann die betroffene Person zur Klärung oder zum Nachtragen
+auffordern.
+
+Beispiel: Für eine Person ist am Montag Arbeit vorgesehen. Bis zum
+Nachmittags-Prüfzeitpunkt existiert weder ein Arbeitsblock noch ein laufender
+Check-in oder eine passende Abwesenheit. Im Verantwortlichenbereich erscheint
+„Zeiterfassung fehlt – bitte klären“.
+
+**Keine automatische Fehlzeitenbewertung:** Ein fehlender Eintrag beweist
+nicht, dass die Person nicht gearbeitet hat. Es werden keine Arbeitsstunden
+erfunden, keine Abwesenheiten automatisch gebucht und keine disziplinarischen
+Bewertungen erzeugt.
+
+Für die Umsetzung sind je Firma folgende Regeln festzulegen:
+
+| Regel | Erforderliche Entscheidung |
+| --- | --- |
+| Prüfzeitpunkt | Feste Uhrzeit je Firma oder relativ zum geplanten Arbeitsbeginn; Zeitzone Zürich. |
+| Auslöser | Zunächst keinerlei Buchung bis zum Prüfzeitpunkt; eine fehlende Nachmittagsbuchung trotz Vormittagsarbeit wäre ein eigener, gesondert zu definierender Fall. |
+| Ausnahmen | Freie Tage, gültige Arbeitsmodelle, Teil-/Ganztagsabwesenheiten und Feiertage berücksichtigen. Offene Abwesenheitsanträge benötigen eine ausdrücklich definierte Behandlung. |
+| Empfänger | Zuständige Person je Mitarbeitendem oder eine ausdrücklich konfigurierte HR-/Admin-Zuständigkeit, nicht automatisch alle Admins. |
+| Kanal | Hinweis in der Anwendung; E-Mail beziehungsweise weitere Kanäle nach Freigabe. Keine unnötigen Krankheitsdetails in Benachrichtigungen. |
+| Bearbeitung | Verantwortliche können erinnern und den Hinweis mit Grund klären. Nachträge müssen den Status neu bewerten; ursprüngliche Hinweise bleiben nachvollziehbar. |
+| Wiederholung | Doppelte Meldungen verhindern; Erinnerungs- und Eskalationsabstände ausdrücklich festlegen. |
+
+Die Prüfung muss serverseitig geplant laufen, auch wenn niemand die Anwendung
+geöffnet hat. Benachrichtigungen benötigen gespeicherten Bearbeitungsstatus,
+Zuständigkeit, Wiederholungs-/Fehlerbehandlung und eine nachvollziehbare
+Zustellung. Das bestehende informative Arbeitszeitfenster wird nicht ohne
+zusätzliche Konfiguration als verbindlicher Schichtplan interpretiert.
+
+Diese Funktion ist eine neue Produktetappe und noch nicht implementiert.
+
 ## 6. Benutzerführung
 
 | Schritt | Ablauf |
@@ -181,6 +219,38 @@ Betreiberbereich. Team und Projekte sind durchsuchbar; Bearbeitungsdetails
 werden erst bei Bedarf geöffnet. Die Nutzer sehen nur Bereiche, die zu ihrer
 Rolle gehören. Zugriffsregeln werden zusätzlich in der Datenbank durchgesetzt,
 nicht nur über ausgeblendete Schaltflächen.
+
+### 6.1 Geführte Ersteinrichtung (geplanter Ausbau)
+
+Jeder neue Benutzer soll einen schrittweisen Einrichtungsassistenten erhalten,
+vergleichbar mit der Ersteinrichtung eines neuen Geräts: ein Schritt pro
+Ansicht, verständliche Erklärung, sichtbarer Fortschritt sowie Zurück und
+Weiter. Der Fortschritt wird dauerhaft gespeichert und lässt sich nach einer
+Unterbrechung auf einem anderen Gerät fortsetzen. Eine Übersicht am Ende zeigt,
+was eingerichtet wurde und welche Schritte noch von Verantwortlichen abhängen.
+
+Die Führung richtet sich nach Rolle und Firmenkontext:
+
+| Rolle | Vorgesehene Schritte |
+| --- | --- |
+| Betreiber | Zugang absichern, erste Firma aufnehmen, Firmen-Admin bestimmen, Pilot-/Abostatus festlegen. |
+| Firmen-Admin | Firmenangaben und Regeln prüfen, Arbeitsmodelle hinterlegen, Projekte erstellen, Team einladen/zuweisen, Zuständigkeiten und Erinnerungsregeln festlegen, Abschlussübersicht. |
+| Mitarbeitende / HR | Einladung und Zugang abschliessen, eigenen Firmenkontext und hinterlegte Arbeitszeiten prüfen, zugewiesene Projekte kennenlernen, Ein-/Auschecken und Abwesenheitsablauf verstehen. |
+
+Mitarbeitende ändern im Assistenten keine Firmenregeln, Rollen oder Sollzeiten,
+für die sie keine Berechtigung besitzen. Fehlende Admin-Konfiguration wird
+als offene Voraussetzung angezeigt, nicht durch stille Standardwerte ersetzt.
+Ein Tutorial legt keine echte Arbeitsbuchung an. Optionale Erklärungen sind
+überspringbar; verpflichtende Sicherheits- und Einrichtungsschritte nicht.
+
+Der Abschluss gilt pro Benutzer und gegebenenfalls pro Firmenmitgliedschaft:
+Eine neu hinzugefügte Firma kann eine erneute kontextspezifische Einführung
+erfordern, ohne die bereits vorhandene Authenticator-Einrichtung zu wiederholen.
+Im Alltag lässt sich die Hilfe erneut öffnen, ohne Konfiguration zurückzusetzen.
+
+**Abgrenzung zum heutigen Stand:** Bereits vorhanden sind Login-/2FA-Schritte
+und eine Einrichtungsliste für Firmen-Admins. Ein vollständiger, dauerhaft
+fortsetzbarer Assistent für alle neuen Benutzer ist noch nicht implementiert.
 
 ## 7. Technisches Konzept
 
@@ -284,6 +354,8 @@ vollständiger gesetzlicher Konformität.
 | Abwesenheiten mit optionaler Freigabe | Im Pilotcode implementiert; Rückzug und Umdatierung noch nicht vollständig umgesetzt. |
 | PDF-/CSV-Auszüge | Implementiert; PDF-Zeichensatz aktuell für lateinische Texte ausgelegt. |
 | Geführte Oberfläche | Implementiert, einschliesslich Desktop-/Mobilansicht und Rollen-Navigation. |
+| Vollständiger Ersteinrichtungsassistent | Geplant: rollenabhängige Schrittfolge und dauerhaft gespeicherter Fortschritt für neue Benutzer. |
+| Hinweise bei fehlender Zeiterfassung | Geplant: serverseitige Prüfung, konfigurierte Zuständigkeiten, Erinnerungen und nachvollziehbare Klärung. |
 | Authenticator-Login und Einladungen | Implementiert; Einrichtung und reale Betriebsabläufe müssen in der Pilotumgebung abgenommen werden. |
 | Stripe-Abos und kostenfreie Freischaltung | Integration implementiert; Zahlungsabläufe noch in Stripe-Testumgebung abzunehmen. |
 | Austritte, Ferienüberträge und Feiertage | Noch nicht implementiert. |
@@ -368,6 +440,8 @@ SaaS-Verkaufsstart. Dafür sind folgende Entscheidungen erforderlich:
 | Budget und Kapazität | Zeitbudget für Einrichtung, Pilotbegleitung und Behebung priorisierter Lücken festlegen. |
 | Hosting und Datenstandort | Anbieter, Region und Vertragsgrundlagen vor echten Personaldaten auswählen. |
 | Fachliche Priorität | Feiertage, Ferienkonten, Austritte und Abwesenheitskorrekturen mit der Pilotfirma bewerten. |
+| Fehlende Zeiterfassung | Prüfzeitpunkt, auslösende Fälle, Zuständigkeiten, Kanäle und Ausnahmen vor Umsetzung festlegen. |
+| Ersteinrichtung | Rollenabhängigen Assistenten mit speicherbarem Fortschritt als nächste UX-Etappe vorsehen. |
 | Erlösmodell | Firmen-Festpreis grundsätzlich bestätigen; Betrag, Leistungsgrenzen und Vertragsbedingungen nach Pilotdaten festlegen. |
 | Verkaufsfreigabe | Erst nach fachlicher, rechtlicher, technischer und betrieblicher Abnahme. |
 
