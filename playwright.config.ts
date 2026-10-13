@@ -9,6 +9,7 @@ export default defineConfig({
     url: "http://localhost:3190",
     reuseExistingServer: false,
     env: {
+      NEXT_UI_TEST: "1",
       NEXT_PUBLIC_SUPABASE_URL: "https://ui-fixture.supabase.co",
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "ui-test-publishable-key",
       CRON_SECRET: "isolated-ui-scheduler-test",

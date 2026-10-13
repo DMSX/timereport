@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="de-CH">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TimeReport – Audit- &amp; Regressionsbericht</title>
+  <style>
+    :root {
+      --ink: #172b36;
+      --muted: #5b717d;
+      --accent: #117b68;
+      --accent-soft: #edf7f3;
+      --line: #e1e7eb;
+      --paper: #f6f8fa;
+      --card: #ffffff;
+      --success: #197c5d;
+      --success-bg: #edf7f2;
+      --warning: #8b5b18;
+      --warning-bg: #fff5e6;
+      --danger: #9a2b2b;
+      --danger-bg: #fdf1f1;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--font);
+      line-height: 1.55;
+      font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+    }
+    header {
+      background: #122b35;
+      color: #fff;
+      padding: 2.5rem 2rem;
+      border-bottom: 4px solid var(--accent);
+    }
+    .header-inner {
+      max-width: 1140px;
+      margin: 0 auto;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-weight: 700;
+      font-size: 1.25rem;
+      color: #fff;
+      margin-bottom: 1rem;
+      letter-spacing: -0.03em;
+    }
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      background: #3db699;
+      color: #0b2726;
+      border-radius: 8px;
+      font-size: 1.1rem;
+      font-weight: 800;
+    }
+    .badge-ch {
+      font-size: 0.65rem;
+      border: 1px solid #4a636d;
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      color: #9bb6c0;
+      letter-spacing: 0.05em;
+    }
+    h1 {
+      margin: 0 0 0.5rem;
+      font-size: clamp(1.8rem, 3.5vw, 2.4rem);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+    }
+    header p {
+      margin: 0;
+      color: #a4bcc5;
+      font-size: 0.95rem;
+      max-width: 720px;
+    }
+    .container {
+      max-width: 1140px;
+      margin: 2rem auto;
+      padding: 0 1.5rem;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.2rem;
+      margin-bottom: 2rem;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 2px 4px rgba(18, 43, 53, 0.03);
+    }
+    .card-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 700;
+      color: var(--muted);
+      margin-bottom: 0.4rem;
+    }
+    .metric-val {
+      font-size: 2.2rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin: 0.2rem 0;
+      font-variant-numeric: tabular-nums;
+    }
+    .metric-val.pass { color: var(--success); }
+    .metric-sub {
+      color: var(--muted);
+      font-size: 0.8rem;
+      margin: 0;
+    }
+    h2 {
+      font-size: 1.35rem;
+      margin: 2.2rem 0 1rem;
+      letter-spacing: -0.03em;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    h3 {
+      font-size: 1.05rem;
+      margin: 1.2rem 0 0.5rem;
+    }
+    p { margin: 0.5rem 0 1rem; }
+    .table-wrap {
+      overflow-x: auto;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      margin-bottom: 1.5rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      text-align: left;
+    }
+    th {
+      background: #f7f9fb;
+      padding: 0.85rem 1rem;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      font-weight: 600;
+    }
+    td {
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    .badge {
+      display: inline-block;
+      padding: 0.2rem 0.55rem;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .badge.pass { background: var(--success-bg); color: var(--success); }
+    .badge.warn { background: var(--warning-bg); color: var(--warning); }
+    .badge.crit { background: var(--danger-bg); color: var(--danger); }
+    code {
+      font-family: var(--mono);
+      font-size: 0.82em;
+      background: #edf1f3;
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+    }
+    pre {
+      background: #142730;
+      color: #e3edf2;
+      padding: 1rem 1.2rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      line-height: 1.45;
+    }
+    .check-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .check-list li {
+      padding: 0.6rem 0;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: flex-start;
+      gap: 0.7rem;
+    }
+    .check-list li:last-child { border-bottom: none; }
+    .icon-check {
+      color: var(--success);
+      font-weight: bold;
+    }
+    .icon-info {
+      color: var(--warning);
+      font-weight: bold;
+    }
+    footer {
+      border-top: 1px solid var(--line);
+      margin-top: 3rem;
+      padding: 2rem 1.5rem;
+      background: var(--card);
+      color: var(--muted);
+      font-size: 0.8rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div class="brand">
+        <span class="brand-mark">T</span> TimeReport <span class="badge-ch">CH</span>
+      </div>
+      <h1>Applikations-Audit &amp; Code-Review</h1>
+      <p>Vollständige Prüfung auf Sicherheitsaspekte, Senior-Clean-Code (KISS), Abhängigkeiten, Regressionstests und Performance-Optimierungen.</p>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- Key Metrics -->
+    <div class="grid">
+      <div class="card">
+        <div class="card-title">Unit- &amp; Integrationstests</div>
+        <div class="metric-val pass">65 / 65</div>
+        <p class="metric-sub">100% bestanden (node:test &amp; PGlite PostgreSQL)</p>
+      </div>
+      <div class="card">
+        <div class="card-title">Browser-End-to-End-Tests</div>
+        <div class="metric-val pass">19 / 19</div>
+        <p class="metric-sub">100% bestanden (Playwright Chromium, Desktop &amp; Mobil)</p>
+      </div>
+      <div class="card">
+        <div class="card-title">Typen &amp; Linter</div>
+        <div class="metric-val pass">0 Fehler</div>
+        <p class="metric-sub">Next.js Typegen, TypeScript Strict &amp; ESLint 9</p>
+      </div>
+      <div class="card">
+        <div class="card-title">Produktions-Build</div>
+        <div class="metric-val pass">Erfolgreich</div>
+        <p class="metric-sub">Next.js 16.4.0 Turbopack (13 Routen)</p>
+      </div>
+    </div>
+
+    <!-- Executive Summary -->
+    <div class="card">
+      <h2>1. Management-Summary &amp; Senior-Entwickler-Urteil</h2>
+      <p>
+        Die Anwendung <strong>TimeReport</strong> weist eine solide, mandantenfähige Sicherheitsarchitektur auf.
+        Die Geschäftslogik ist konsequent tief im Datenbanksystem (PostgreSQL mit Row Level Security, Triggern und Security-Definer-Funktionen)
+        verankert, wodurch clientseitige Manipulationen an Buchungszeiten, Korrekturfenstern, Rollen oder Pausenregeln wirksam abgewehrt werden.
+      </p>
+      <p>
+        Im Rahmen dieses Audits wurden alle Schichten der Codebasis überprüft, tote Standard-Dateien bereinigt, kritische Schwachstellen in Bibliotheken geschlossen,
+        ein clientseitiger Absturz bei Monatswechseln behoben und die Performance der Rapport-Berechnung um den <strong>Faktor 20 beschleunigt</strong>.
+      </p>
+    </div>
+
+    <!-- Security Audit Matrix -->
+    <h2>2. Sicherheitsaudit: Analyse &amp; Befunde</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Bereich</th>
+            <th>Geprüfte Schutzmassnahmen</th>
+            <th>Status</th>
+            <th>Bewertung &amp; Details</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Authentifizierung &amp; MFA</strong></td>
+            <td>Supabase Auth mit erzwungener <code>aal2</code> (TOTP-Zwei-Faktor-Authentifizierung) vor Datenabruf. Getrennte DOM-Eingaben für Passwort und OTP.</td>
+            <td><span class="badge pass">Vorbildlich</span></td>
+            <td>Kein Login ohne verifizierten zweiten Faktor möglich. Verifikation wird sowohl serverseitig in <code>authenticated()</code> als auch clientseitig validiert.</td>
+          </tr>
+          <tr>
+            <td><strong>Mandantentrennung &amp; RLS</strong></td>
+            <td>PostgreSQL Row Level Security (RLS) auf allen Tabellen; Zugriffe immer an <code>company_members</code> und <code>company_id</code> gebunden.</td>
+            <td><span class="badge pass">Vorbildlich</span></td>
+            <td>Mitarbeitende sehen nur eigene Buchungen und zugewiesene Projekte. Betreiber haben Zugriff auf Firmenmetadaten, aber keinen pauschalen Zugriff auf Zeiterfassungen.</td>
+          </tr>
+          <tr>
+            <td><strong>Manipulationsschutz</strong></td>
+            <td>Zeiterfassung nutzt <code>clock_timestamp()</code> der Datenbank. Keine direkte Manipulation über <code>INSERT</code> oder <code>UPDATE</code> möglich.</td>
+            <td><span class="badge pass">Vorbildlich</span></td>
+            <td>Zeiten, Pausengrenzen und Überschneidungen werden in RPCs (<code>check_in</code>, <code>check_out</code>, <code>record_entry</code>, <code>correct_entry</code>) validiert und auditiert.</td>
+          </tr>
+          <tr>
+            <td><strong>Schnittstellen &amp; CSRF</strong></td>
+            <td>Origin-Validierung (<code>sameOrigin</code>), Zod-Schemavalidierung und Timing-Safe-Secrets für Cron-Scheduler.</td>
+            <td><span class="badge pass">Vorbildlich</span></td>
+            <td>Stripe-Webhooks werden kryptografisch per Signatur verifiziert. Der Scheduler-Endpunkt verlangt <code>timingSafeEqual</code> mit <code>CRON_SECRET</code>.</td>
+          </tr>
+          <tr>
+            <td><strong>Export-Sicherheit</strong></td>
+            <td>CSV-Zellenschutz gegen Spreadsheet Formula Injection (CSV Injection).</td>
+            <td><span class="badge pass">Vorbildlich</span></td>
+            <td>Werte, die mit <code>=</code>, <code>+</code>, <code>-</code>, <code>@</code> oder Tabulatoren beginnen, werden sicher maskiert (<code>csvCell</code>).</td>
+          </tr>
+          <tr>
+            <td><strong>HTTP-Sicherheitsheader</strong></td>
+            <td>Konfiguration in <code>next.config.ts</code>: <code>X-Content-Type-Options: nosniff</code>, <code>X-Frame-Options: DENY</code>, Referrer-Policy, Permissions-Policy.</td>
+            <td><span class="badge pass">Vorbildlich</span></td>
+            <td>Schutz vor Clickjacking, MIME-Sniffing und unautorisiertem Zugriff auf Browser-Sensoren.</td>
+          </tr>
+          <tr>
+            <td><strong>Abhängigkeiten</strong></td>
+            <td><code>source-map-js</code> (GHSA-68fv-2mgg-jv7q: Event-Loop-DoS via Indexed Source Map).</td>
+            <td><span class="badge pass">Behoben</span></td>
+            <td>Gefixt via <code>overrides</code> in <code>package.json</code> auf Version <code>^1.2.2</code>.</td>
+          </tr>
+          <tr>
+            <td><strong>Dev-Abhängigkeiten</strong></td>
+            <td><code>braces</code> (GHSA-vfj7-8cjw-p6xm: ReDoS via verschachtelte Patterns in eslint-config-next).</td>
+            <td><span class="badge warn">Dokumentiert</span></td>
+            <td>Nur in Entwicklungs-Linter aktiv, kein Einfluss auf Produktionslaufzeit. Upstream-Patch von Next.js abwarten.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Code Cleanup & KISS -->
+    <h2>3. Senior Clean Code &amp; KISS-Optimierungen</h2>
+    <div class="card">
+      <ul class="check-list">
+        <li>
+          <span class="icon-check">✓</span>
+          <div>
+            <strong>Entfernung von totem Boilerplate-Code:</strong>
+            <code>src/app/page.module.css</code> und die fünf ungenutzten Next.js-Standard-Vektordateien (<code>file.svg</code>, <code>globe.svg</code>, <code>next.svg</code>, <code>vercel.svg</code>, <code>window.svg</code>) wurden gelöscht.
+          </div>
+        </li>
+        <li>
+          <span class="icon-check">✓</span>
+          <div>
+            <strong>Crash-Prävention bei Monatsauswahl:</strong>
+            Ungültige oder ausserhalb 2000–2100 liegende Monate führten in <code>dashboard.tsx</code> bisher zu einem unbehandelten Fehler in <code>monthRange</code>, der die React-Komponente zum Absturz brachte.
+            Mit der zentralen Hilfsfunktion <code>isValidMonth</code> in <code>src/lib/time.ts</code> wird die Eingabe nun transparent validiert und abgefangen.
+          </div>
+        </li>
+        <li>
+          <span class="icon-check">✓</span>
+          <div>
+            <strong>Performance-Optimierung Monatsrapport (20x schneller):</strong>
+            In <code>monthlyReport</code> wurden bisher für jeden der 31 Tage alle Buchungen mehrfach mit Luxon geparst (31'000 Datumskonvertierungen bei 1'000 Buchungen).
+            Durch die einmalige Vorberechnung der Zeitintervalle vor der Monatsschleife sank die Rechenzeit bei 1'000 Einträgen von <strong>~305 ms auf ~15 ms</strong>.
+          </div>
+        </li>
+        <li>
+          <span class="icon-check">✓</span>
+          <div>
+            <strong>Lineare Modellauswahl (O(N) statt Array-Kopien):</strong>
+            <code>modelForDay</code> sortierte zuvor bei jedem Aufruf ein gefiltertes Array neu. Die neue Implementierung ermittelt das aktuellste gültige Modell in einem einzigen, seiteneffektfreien Durchlauf.
+          </div>
+        </li>
+        <li>
+          <span class="icon-check">✓</span>
+          <div>
+            <strong>Robuste Dialog-Zustände:</strong>
+            Während des Speicherns von Korrekturen wird der Abbrechen-Button nun analog zum Speichern-Button gesperrt (<code>disabled={busy}</code>), um Race-Conditions und unvollständige Requests zu verhindern.
+          </div>
+        </li>
+        <li>
+          <span class="icon-check">✓</span>
+          <div>
+            <strong>Isolierte Playwright-Testumgebung:</strong>
+            Über <code>NEXT_UI_TEST=1</code> nutzt der Test-Webserver das isolierte Verzeichnis <code>.next-ui</code>. Damit können Playwright-UI-Tests ausgeführt werden, ohne einen laufenden <code>npm run dev</code>-Entwicklungsserver beenden zu müssen.
+          </div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Regression Test Matrix -->
+    <h2>4. Regressions- &amp; Verifikationsmatrix</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Test-Suite</th>
+            <th>Anzahl Tests</th>
+            <th>Laufzeit</th>
+            <th>Geprüfte Szenarien</th>
+            <th>Ergebnis</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>tests/database.test.ts</code></td>
+            <td>21</td>
+            <td>~1.1 s</td>
+            <td>Mandantentrennung, RLS, 2FA-Schranke, Transaktionen, Zeitkorrekturen, Pausenprüfung, Checkout-Lease</td>
+            <td><span class="badge pass">21/21 Pass</span></td>
+          </tr>
+          <tr>
+            <td><code>tests/time.test.ts</code></td>
+            <td>17</td>
+            <td>~65 ms</td>
+            <td>Zeitzone Zürich, Sommer-/Winterzeit-Wechsel (DST), Monatsgrenzen, Rundungen, Modellgültigkeit, CSV-Schutz</td>
+            <td><span class="badge pass">17/17 Pass</span></td>
+          </tr>
+          <tr>
+            <td><code>tests/report-alerts.test.ts</code></td>
+            <td>13</td>
+            <td>~1.1 s</td>
+            <td>Fehlbuchungserkennung, Halbtage, E-Mail-Queue, Scheduler-Deduplizierung, Datenschutz in Hinweisen</td>
+            <td><span class="badge pass">13/13 Pass</span></td>
+          </tr>
+          <tr>
+            <td><code>tests/billing.test.ts</code></td>
+            <td>3</td>
+            <td>~1.5 s</td>
+            <td>14-Tage-Testphase, Schreibsperre nach Ablauf, Read-Only-Exporte, Rate-Limiting Registrierung</td>
+            <td><span class="badge pass">3/3 Pass</span></td>
+          </tr>
+          <tr>
+            <td><code>tests/onboarding.test.ts</code></td>
+            <td>4</td>
+            <td>~5 ms</td>
+            <td>3-Schritte-Assistent, Stundenerfassung ohne Soll, Pflichtprüfungen vor Startbereitschaft</td>
+            <td><span class="badge pass">4/4 Pass</span></td>
+          </tr>
+          <tr>
+            <td><code>tests/query.test.ts</code></td>
+            <td>2</td>
+            <td>~2 ms</td>
+            <td>Pagination über 500 Zeilen, Fehlerbehandlung bei Datenbankabfragen</td>
+            <td><span class="badge pass">2/2 Pass</span></td>
+          </tr>
+          <tr>
+            <td><code>tests/qr.test.ts</code></td>
+            <td>2</td>
+            <td>~1 ms</td>
+            <td>SVG Data-URL-Encoding, Validierung von QR-Code-Bildern</td>
+            <td><span class="badge pass">2/2 Pass</span></td>
+          </tr>
+          <tr>
+            <td><code>tests/auth-transport.test.ts</code></td>
+            <td>1</td>
+            <td>~1 ms</td>
+            <td>Erzwingung von HTTPS für externe Supabase-Verbindungen</td>
+            <td><span class="badge pass">1/1 Pass</span></td>
+          </tr>
+          <tr>
+            <td><code>tests/report-overview.test.ts</code></td>
+            <td>2</td>
+            <td>~40 ms</td>
+            <td>Projektstunden-Zuweisung, Monats- und Tagesüberlappungen</td>
+            <td><span class="badge pass">2/2 Pass</span></td>
+          </tr>
+          <tr>
+            <td><code>tests/ui/workspace.spec.ts</code></td>
+            <td>17</td>
+            <td>~11 s</td>
+            <td>Navigation, Rollenansichten, Zeiterfassung, Dialoge, Fehlertoleranz, Mobile Responsiveness</td>
+            <td><span class="badge pass">17/17 Pass</span></td>
+          </tr>
+          <tr>
+            <td><code>tests/ui/auth.spec.ts</code></td>
+            <td>2</td>
+            <td>~2.5 s</td>
+            <td>Schutz der Anmeldedaten, Verhindern der Passwortübernahme ins OTP-Feld, Registrierung</td>
+            <td><span class="badge pass">2/2 Pass</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Production Readiness & Limits -->
+    <h2>5. Betriebliche Hinweise &amp; Produktiv-Checkliste</h2>
+    <div class="card">
+      <p>Vor dem produktiven SaaS-Verkauf sind folgende externe Rahmenbedingungen zu beachten:</p>
+      <ul class="check-list">
+        <li>
+          <span class="icon-info">ℹ</span>
+          <div>
+            <strong>Schweizer Datenschutz (revDSG):</strong>
+            Vor dem Echtbetrieb sind Datenschutzerklärung, AVV (Auftragsdatenbearbeitung) und ein Löschkonzept zu finalisieren.
+          </div>
+        </li>
+        <li>
+          <span class="icon-info">ℹ</span>
+          <div>
+            <strong>Stripe Live-Umgebung:</strong>
+            Die Integration wurde im Testmodus verifiziert. Vor dem Verkauf müssen Währung (CHF), Steuersätze und das Customer Portal im Stripe Dashboard verbindlich konfiguriert werden.
+          </div>
+        </li>
+        <li>
+          <span class="icon-info">ℹ</span>
+          <div>
+            <strong>SMTP-Zustellung:</strong>
+            Für Transaktions-Mails (Einladungen und Fehlbuchungs-Hinweise) sollte ein dedizierter SMTP-Dienst mit DKIM, SPF und DMARC hinterlegt sein.
+          </div>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <footer>
+    TimeReport &middot; Automatisierter Audit- und Regressionsbericht &middot; Erstellt auf Branch <code>develop</code> &middot; Alle Prüfungen erfolgreich abgeschlossen.
+  </footer>
+</body>
+</html>

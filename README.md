@@ -364,9 +364,9 @@ npx playwright install chromium
 npm run test:ui
 ```
 
-Die UI-Tests starten einen eigenen Entwicklungsserver auf Port 3190.
-Vorher einen laufenden `next dev`-Prozess dieses Projekts beenden, da Next.js
-dasselbe Build-Verzeichnis sperrt. Die Tests verwenden weder echte Benutzer
+Die UI-Tests starten einen eigenen Entwicklungsserver auf Port 3190 mit
+`NEXT_UI_TEST=1` und dem separaten Build-Verzeichnis `.next-ui`. Ein laufender
+Entwicklungsserver muss dafür nicht beendet werden. Die Tests verwenden weder echte Benutzer
 noch Cloud-Daten und prüfen Einstieg, Rollen-Navigation, Ein-/Auschecken,
 Dialoge, Fehleranzeige sowie mobile Darstellung.
 
@@ -375,6 +375,10 @@ aus und prüfen Mandantengrenzen, 2FA, direkte Schreibverbote, Korrekturen und
 Abwesenheiten. Weitere Tests prüfen Zeitberechnung, Monatsgrenzen,
 Zeitumstellung, Pausen bei Projektwechsel und CSV-Formelschutz.
 Es werden keine Cloud-Zugangsdaten für diese Tests benötigt.
+
+Der statische [Auditbericht](docs/audit-result.html) dokumentiert Befunde,
+Korrekturen, Regressionsergebnisse und verbleibende Prüfgrenzen. Die Datei lässt
+sich direkt im Browser öffnen und benötigt weder Server noch externe Ressourcen.
 
 ## Grenzen und nächste Produktetappen
 

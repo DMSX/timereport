@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DateTime } from "luxon";
-import { breakViolations, correctionDeadline, csvCell, minutesLabel, monthRange, monthlyReport, vacationUsed } from "../src/lib/time";
+import { breakViolations, correctionDeadline, csvCell, isValidMonth, minutesLabel, modelForDay, monthRange, monthlyReport, vacationUsed } from "../src/lib/time";
 import type { Absence, Entry, WorkModel } from "../src/lib/types";
 import { dayReportCells, reportNote } from "../src/lib/report-display";
 
@@ -67,8 +67,37 @@ test("CSV quotes content and prevents spreadsheet formula execution", () => {
   assert.equal(csvCell("  =1+1"), "\"'  =1+1\"");
 });
 test("invalid months cannot silently generate empty reports", () => {
-  assert.throws(() => monthRange("2026-13"));
-  assert.throws(() => monthRange("wrong"));
+  for (const month of ["2026-13", "2026-00", "2026-1", "1999-12", "2101-01", "wrong", ""]) {
+    assert.equal(isValidMonth(month), false);
+    assert.throws(() => monthRange(month), /Ungültiger Monat/);
+  }
+  for (const month of ["2000-01", "2026-10", "2100-12"]) {
+    assert.equal(isValidMonth(month), true);
+    assert.equal(monthRange(month).start.toFormat("yyyy-MM"), month);
+  }
+});
+test("model lookup selects the latest effective model without mutating input order", () => {
+  const future = { ...model, id: "future", valid_from: "2027-01-01" };
+  const current = { ...model, id: "current", valid_from: "2026-10-05" };
+  const models = [future, current, model];
+  assert.equal(modelForDay(models, "2026-10-12"), current);
+  assert.equal(modelForDay(models, "2026-01-01"), model);
+  assert.equal(modelForDay(models, "2025-12-31"), undefined);
+  assert.deepEqual(models.map((value) => value.id), ["future", "current", "model"]);
+});
+test("monthly intervals exclude other months and use elapsed time across spring DST", () => {
+  const now = DateTime.fromISO("2026-03-31T23:00:00+02:00");
+  const report = monthlyReport("2026-03", [
+    entry("before", "2026-02-01T08:00:00Z", "2026-02-01T09:00:00Z"),
+    entry("boundary", "2026-02-28T23:30:00+01:00", "2026-03-01T00:30:00+01:00"),
+    entry("spring", "2026-03-29T01:30:00+01:00", "2026-03-29T03:30:00+02:00"),
+    entry("running", "2026-03-31T22:30:00+02:00", null),
+    entry("after", "2026-04-01T08:00:00Z", "2026-04-01T09:00:00Z"),
+  ], [model], [], now);
+  assert.equal(report[0].worked, 30);
+  assert.equal(report[28].worked, 60);
+  assert.equal(report[30].worked, 30);
+  assert.equal(report.reduce((sum, day) => sum + day.worked, 0), 120);
 });
 
 test("hourly work has no target or balance and absences remain documented without credits", () => {
