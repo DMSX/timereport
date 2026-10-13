@@ -108,17 +108,31 @@ automatisch Schweizer Datenhaltung oder erfüllten Datenschutz.
 
 ## 5. Geschäftsmodell
 
-Vorgesehen ist ein **monatlicher Festpreis pro Firma**. Der Betreiber kann
-Pilotfirmen kostenfrei freischalten. Preis, Nutzungsgrenzen, Steuern und
-Vertragsbedingungen werden anhand des Pilots festgelegt.
+Vorgesehen ist ein **monatlicher Festpreis pro Firma**. Preis, Nutzungsgrenzen,
+Steuern und Vertragsbedingungen werden anhand des Pilots festgelegt.
 
 Die Kalkulation berücksichtigt Hosting, Datenbank/Auth, E-Mail,
 Zahlungsgebühren, Support und Wartung. Ein Festpreis ist keine Zusage
 unbegrenzter Nutzung. Kostenfreie Firmen verursachen ebenfalls Aufwand.
 
-Stripe ist integriert; im Pilot sperren Zahlungsprobleme noch keine
-Zeiterfassung. Kündigungs-, Mahn- und Zugangsregeln sind vor Verkauf
-festzulegen. Kostenfreie Freischaltung kündigt ein bestehendes Abo nicht.
+**Automatischer Kundenlebenszyklus – ohne Betreiberaufwand im Normalfall:**
+
+1. **Registrierung:** Selbstregistrierung mit E-Mail-Bestätigung; Firma und
+   Admin entstehen automatisch, der Admin richtet Passwort und 2FA selbst ein.
+2. **Testphase:** 14 Tage kostenlos, ohne Zahlungsdaten.
+3. **Abo:** Der Admin schliesst es selbst über Stripe ab; Stripe-Webhooks
+   steuern den Status.
+4. **Ende oder Kündigung:** Die Firma wird automatisch **nur lesbar** – Daten
+   bleiben sichtbar und exportierbar, neue Zeiten sind gesperrt. Mit
+   aktivem Abo ist sie sofort wieder freigeschaltet. Bei Zahlungsverzug
+   bleibt der Zugang, bis Stripe das Abo beendet (Mahnregeln in Stripe).
+5. **Betrieb:** Tests, Datenbankmigrationen und der 15-Minuten-Scheduler
+   laufen über GitHub Actions.
+
+Der Betreiber greift nur noch bei Ausnahmen ein: kostenfreie Freischaltung
+für Sonderfälle, Support und 2FA-Reset nach Identitätsprüfung. Vor Verkauf
+bleiben Datenschutz-/Vertragsprüfung, Missbrauchsschutz (z. B. Captcha)
+und die Einrichtung der Dienste (einmalig) menschliche Aufgaben.
 
 ## 6. Projektstand und nächster Entscheid
 

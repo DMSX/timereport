@@ -40,3 +40,19 @@ for (const enroll of [false,true]) {
     await expect(page.locator("#auth-totp-code")).toHaveCount(0);
   });
 }
+
+test("signup starts a free trial without payment details", async ({page}) => {
+  let body: Record<string, string> = {};
+  await page.route("**/api/signup", async (route) => {
+    body = route.request().postDataJSON();
+    await route.fulfill({json:{message:"Fast geschafft: Wir haben dir eine E-Mail gesendet."}});
+  });
+  await page.goto("/signup");
+  await expect(page.getByText("14 Tage kostenlos testen")).toBeVisible();
+  await page.getByLabel("Firma oder Name").fill("Muster GmbH");
+  await page.getByLabel("Dein Name").fill("Mia Muster");
+  await page.getByLabel("E-Mail",{exact:true}).fill("mia@example.invalid");
+  await page.getByRole("button",{name:"Kostenlos starten"}).click();
+  await expect(page.getByRole("status")).toContainText("E-Mail gesendet");
+  expect(body).toEqual({company:"Muster GmbH",name:"Mia Muster",email:"mia@example.invalid"});
+});

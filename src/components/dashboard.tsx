@@ -7,6 +7,7 @@ import { browserClient } from "@/lib/supabase/browser";
 import { allRows, checked } from "@/lib/query";
 import { breakViolations, correctionDeadline, displayTime, localTime, minutesLabel, modelForDay, monthRange, monthlyReport, vacationUsed, ZONE } from "@/lib/time";
 import type { Absence, Company, EmailJob, Entry, Member, OnboardingProgress, Project, ReportAlert, ReportSetting, Resolution, Subscription, WorkModel } from "@/lib/types";
+import { accessState, trialDaysLeft } from "@/lib/access";
 import Modal from "./modal";
 import { isSection, sections, WorkspaceNav, type Section } from "./workspace";
 import { setupSteps } from "@/lib/onboarding";
@@ -180,6 +181,7 @@ export default function Dashboard() {
   const ownViolations = breakViolations(ownEntries, now);
   const report = /^\d{4}-\d{2}$/.test(month) ? monthlyReport(month, entries, models, absences, now) : [];
   const sub = data.subscriptions.find((s) => s.company_id === companyId);
+  const access = accessState(sub, now.toJSDate());
   const range = monthRange(month);
   const visibleEntries = entries.filter((e) => localTime(e.started_at) < range.end && localTime(e.ended_at ?? now.toISO()!) > range.start);
   const allowed: Section[] = [
@@ -343,6 +345,8 @@ export default function Dashboard() {
         </div>}
       </div>
       {message && !panel && !editing && <p role={failed ? "alert" : "status"} className={`notice ${failed ? "error" : ""}`}>{message}</p>}
+      {loaded && sub && access === "trial" && trialDaysLeft(sub, now.toJSDate()) <= 7 && <p role="status" className="notice">Deine Testphase endet in {trialDaysLeft(sub, now.toJSDate())} Tagen.{admin ? " Aktiviere unter «Abo» dein Firmenabo, damit die Erfassung weiterläuft." : " Bitte deinen Firmen-Admin, das Abo zu aktivieren."}</p>}
+      {loaded && access === "locked" && !data.operator && <p role="alert" className="notice error">Testphase oder Abo beendet: Deine Daten bleiben les- und exportierbar, neue Zeiten können aber nicht erfasst werden.{admin ? " Aktiviere unter «Abo» dein Firmenabo." : " Bitte deinen Firmen-Admin, das Abo zu aktivieren."}</p>}
       {!loaded && !failed && <div className="loading-state" role="status"><span className="loading-dot" /> Daten werden geladen …</div>}
       {!loaded && failed && <button className="secondary" disabled={busy} onClick={() => run(reload, "Übersicht aktualisiert.")}>Erneut laden</button>}
       {loaded && !ownMember && !data.operator && <section className="card"><p>Dein Benutzer ist noch keiner Firma zugewiesen. Bitte kontaktiere deinen Admin.</p></section>}
@@ -567,7 +571,7 @@ export default function Dashboard() {
       </>}
 
       {admin && current === "billing" && <section className="card"><h2>Ein Firmenabo für dein Team.</h2>
-        <p>Status: <strong>{sub?.complimentary ? "Kostenfrei freigeschaltet" : sub?.status ?? "Nicht eingerichtet"}</strong></p>
+        <p>Status: <strong>{access === "complimentary" ? "Kostenfrei freigeschaltet" : access === "trial" && sub ? `Testphase · noch ${trialDaysLeft(sub)} Tage` : access === "active" ? "Abo aktiv" : "Gesperrt · nur lesen und exportieren"}</strong></p>
         <p>Monatlicher Festpreis pro Firma. Preis und Währung werden vor Abschluss im Stripe-Checkout angezeigt. Keine automatische Abbuchung ohne Abschluss.</p>
         <div className="actions"><button disabled={busy || !sub || sub.complimentary} onClick={() => run(async () => {
           const result = await post("/api/billing", { company: companyId, action: "checkout" });
@@ -577,7 +581,7 @@ export default function Dashboard() {
             const result = await post("/api/billing", { company: companyId, action: "portal" });
             if ("url" in result && typeof result.url === "string") window.location.assign(result.url); else throw new Error("Portal-URL fehlt.");
           }, "")}>Abo verwalten</button></div>
-        <p className="muted">Im Pilotbetrieb sperrt ein Zahlungsproblem keine Zeiterfassung. Eine kommerzielle Zugangssperre wird vor dem Verkauf gesondert festgelegt.</p>
+        <p className="muted">Nach Ende der Testphase oder bei beendetem Abo bleiben alle Daten les- und exportierbar. Neue Zeiten und Abwesenheiten lassen sich erst nach Aktivierung des Abos wieder erfassen. Bei Zahlungsverzug bleibt der Zugang bestehen, bis Stripe das Abo beendet.</p>
       </section>}
 
       {data.operator && current === "operator" && <>

@@ -41,7 +41,7 @@ export type OnboardingProgress = { user_id: string; scope: string; step: number;
 export type Subscription = {
   company_id: string; complimentary: boolean; status: string;
   stripe_customer_id: string | null; stripe_subscription_id: string | null;
-  checkout_lease: string | null; checkout_lease_until: string | null;
+  checkout_lease: string | null; checkout_lease_until: string | null; trial_ends_at: string;
 };
 export type Resolution = {
   entry_id: string; company_id: string; resolved_by: string; reason: string; resolved_at: string;
@@ -78,6 +78,7 @@ export type Database = {
       review_absence: { Args: { p_absence: string; p_status: string; p_reason: string }; Returns: undefined };
       resolve_break: { Args: { p_entry: string; p_reason: string }; Returns: undefined };
       provision_company: { Args: { p_name: string; p_user: string; p_admin_name: string }; Returns: string };
+      signup_company: { Args: { p_name: string; p_user: string; p_admin_name: string }; Returns: string };
       claim_checkout: { Args: { p_company: string }; Returns: { token: string; expires_at: number }[] };
       refresh_report_alerts: { Args: Record<string, never>; Returns: number };
       report_condition: { Args: { p_company: string; p_user: string; p_day: string }; Returns: { kind: string; due_at: string }[] };
