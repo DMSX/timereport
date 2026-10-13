@@ -4,7 +4,7 @@
 
 **Zweck:** Entscheidungsgrundlage für den Pilotbetrieb
 
-**Status:** Technische Pilotversion vorhanden; noch keine Freigabe für den öffentlichen Verkauf
+**Status:** Technische Pilotversion mit automatisiertem Kundenlebenszyklus (Registrierung, Testphase, Abo, Sperre); noch keine Freigabe für den öffentlichen Verkauf
 
 ## 1. Idee und Nutzen
 
@@ -37,8 +37,9 @@ Klärungsbedarf statt einer pauschalen Fehlzeitenbehauptung.
 
 **Rollen:** Mitarbeitende verwalten eigene Zeiten; HR prüft Firmenrapporte
 und Arbeitsmodelle; Admin verwaltet zusätzlich Personen, Projekte, Regeln und
-Abo. Der SaaS-Betreiber verwaltet Firmen und Freischaltungen, hat aber ohne
-Firmenmitgliedschaft keinen pauschalen Zugriff auf Personalrapporte.
+Abo. Firmen entstehen per Selbstregistrierung. Der SaaS-Betreiber behandelt
+nur Ausnahmen (Kostenfreigabe, Support), hat aber ohne Firmenmitgliedschaft
+keinen pauschalen Zugriff auf Personalrapporte.
 
 **Nicht enthalten:** Lohnabrechnung, Kundenfakturierung, ERP-Anbindungen,
 Offline-Erfassung und eine pauschale Zusicherung gesetzlicher Arbeitsrechtskonformität.
@@ -54,6 +55,8 @@ Browser --> Next.js: Oberfläche, geschützte Endpunkte, Exporte
         --> Supabase Auth / Daten-API --> PostgreSQL mit Zugriffsregeln
 
 Next.js --> Stripe: Firmenabos
+Besucher --> /signup --> Einladung per E-Mail --> Firma + Admin + Testphase
+GitHub Actions --> Migrationen (Supabase) und geschützter Scheduler-Aufruf
 Scheduler --> geschützter Next.js-Endpunkt --> Datenbank-Warteschlange --> SMTP
 Supabase Auth --> separates SMTP für Einladungen und Wiederherstellung
 ```
@@ -137,19 +140,25 @@ und die Einrichtung der Dienste (einmalig) menschliche Aufgaben.
 ## 6. Projektstand und nächster Entscheid
 
 Die Kernfunktionen, flexible Arbeitsmodelle, Modal-Einrichtung, Rapporte,
-Hinweise und Stripe-Anbindung sind im Pilotcode implementiert.
-**Implementiert bedeutet noch nicht produktiv abgenommen:** Fehlende
-Datenbankmigrationen, Auth, SMTP, Scheduler und Stripe-Testabläufe müssen
-in der Zielumgebung eingerichtet und geprüft werden.
+Hinweise, Stripe-Anbindung sowie Selbstregistrierung, Testphase,
+automatische Lese-Sperre und Betriebsautomatisierung (CI, Migrationen,
+Scheduler) sind im Pilotcode implementiert und automatisiert getestet.
+**Implementiert bedeutet noch nicht produktiv abgenommen:** Auth, SMTP,
+GitHub-Secrets und Stripe-Testabläufe (Checkout, Zahlungsausfall,
+Kündigung) müssen einmalig in der Zielumgebung eingerichtet und mit echten
+Diensten geprüft werden. Offen sind zudem Missbrauchsschutz bei der
+Registrierung (z. B. Captcha), Unterdrücken von Hinweisen für gesperrte
+Firmen und ein automatischer Ablauf für Passwort-/2FA-Verlust.
 
 Offene Ausbauten sind unter anderem Ferienüberträge/Austritte, vollständige
 Abwesenheitskorrekturen, automatische Feiertags-Sollberechnung und
 Optimierungen für grosse Historien. Einrichtung und technische Details
 stehen im [README](../README.md).
 
-**Empfehlung:** Einen begrenzten Pilot mit einer kleinen Firma freigeben,
-noch keinen öffentlichen Verkaufsstart. Dafür Produkt-/Betriebsverantwortung,
+**Empfehlung:** Einen begrenzten Pilot mit ein bis drei kleinen Firmen über
+die Selbstregistrierung starten, noch keinen öffentlichen Verkaufsstart.
+Dafür Produkt-/Betriebsverantwortung,
 Budget und Datenschutzvoraussetzungen festlegen. Mindestens einen Monatszyklus
 erproben und Einrichtungsaufwand, Rapportqualität, Supportkosten sowie
-Zahlungsbereitschaft bewerten. Danach Preis, Leistungsgrenzen und
-Produktionsfreigabe entscheiden.
+Zahlungsbereitschaft bewerten, einschliesslich Testende und Abo-Abschluss.
+Danach Preis, Leistungsgrenzen und Produktionsfreigabe entscheiden.
