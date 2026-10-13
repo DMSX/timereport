@@ -1,0 +1,16 @@
+name: Rapport-Erinnerungen
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Worker aufrufen
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: curl --fail --silent --show-error --max-time 60 -X POST -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/jobs/report-alerts"

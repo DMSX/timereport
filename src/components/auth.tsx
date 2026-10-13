@@ -87,7 +87,7 @@ export default function Auth() {
     <div className="auth-steps" aria-label="Anmeldeschritte"><span className={step === "password" || step === "loading" ? "current" : ""}>1 · Anmelden</span><span className={!verifiedSetup && (step === "enroll" || step === "verify") ? "current" : ""}>2 · Bestätigen</span>{passwordSetup && <span className={verifiedSetup ? "current" : ""}>3 · Passwort</span>}</div>
     <span className="eyebrow">{step === "enroll" ? "Einmalige Einrichtung" : "Dein Arbeitsplatz wartet"}</span>
     <h1>{verifiedSetup ? "Passwort festlegen" : step === "password" || step === "loading" ? "Willkommen zurück." : step === "enroll" ? "Zugang absichern." : "Kurz bestätigen."}</h1>
-    <p>{verifiedSetup ? "Wähle ein persönliches Passwort mit mindestens zwölf Zeichen." : step === "enroll" ? "Verbinde deine Authenticator-App. Damit bleiben deine Firmendaten geschützt." : step === "verify" ? "Öffne deine Authenticator-App und gib den aktuellen Code für TimeReport ein." : "Melde dich mit deiner Firmen-E-Mail an. Neue Zugänge erhältst du auf Einladung."}</p>
+    <p>{verifiedSetup ? "Wähle ein persönliches Passwort mit mindestens zwölf Zeichen." : step === "enroll" ? "Verbinde deine Authenticator-App. Damit bleiben deine Firmendaten geschützt." : step === "verify" ? "Öffne deine Authenticator-App und gib den aktuellen Code für TimeReport ein." : "Melde dich mit deiner Firmen-E-Mail an. Noch kein Konto? Starte unten kostenlos."}</p>
     {message && <p role="alert" className="notice error">{message}</p>}
     {verifiedSetup ? <form key="new-password" onSubmit={async (e) => {
       e.preventDefault(); setBusy(true);
@@ -123,6 +123,7 @@ export default function Auth() {
       if (error) setMessage(error.message);
       else { setSignedIn(false); setAal2(false); setStep("password"); setQr(""); setSecret(""); setCode(""); router.replace("/login"); router.refresh(); }
     }}>Abmelden</button>}
+    {step === "password" && <p className="muted">Neu hier? <Link href="/signup">14 Tage kostenlos testen</Link></p>}
     <p className="muted">Passwort oder Authenticator verloren? Kontaktiere deinen Firmen-Admin. Ein 2FA-Reset erfolgt nur nach Identitätsprüfung.</p>
     </div></section>
   </main>;

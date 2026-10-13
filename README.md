@@ -32,15 +32,19 @@ npm run dev
    Projekts; die Migration ist nicht für eine bereits anderweitig genutzte
    Datenbank gedacht.
    Bei einer Neuinstallation anschliessend
-   `supabase\migrations\202610120002_onboarding_alerts.sql` und
-   `supabase\migrations\202610120003_flexible_work_models.sql` in dieser Reihenfolge ausführen.
+   `202610120002_onboarding_alerts.sql`, `202610120003_flexible_work_models.sql`
+   und `202610120004_self_service_billing.sql` in dieser Reihenfolge ausführen.
    **Bestehende Installationen führen nur die noch fehlenden Migrationen
    einmal in Reihenfolge aus**, nicht bereits angewendete wiederholen.
+   Spätere Migrationen laufen automatisch (siehe «Automatisierung»).
 2. Projekt-URL und Publishable Key in `.env.local` hinterlegen. Der
    `SUPABASE_SERVICE_ROLE_KEY` ist nur für serverseitige Einladungen,
    Firmenaufnahme und Stripe-Synchronisation bestimmt. Niemals als
    `NEXT_PUBLIC_...` konfigurieren.
-3. Unter Auth die öffentliche Neuregistrierung deaktivieren, E-Mail/Passwort und
+3. Unter Auth die öffentliche Neuregistrierung **deaktiviert lassen**: Die
+   Selbstregistrierung unter `/signup` läuft serverseitig über eine Einladung
+   (E-Mail-Bestätigung) und ist auf 30 neue Firmen pro Stunde begrenzt.
+   E-Mail/Passwort und
    TOTP-MFA aktivieren. Mindestpasswortlänge auf 12 setzen; E-Mail-Verifikation,
    Rate Limits und Schutz vor kompromittierten Passwörtern konfigurieren.
 4. Site URL auf `APP_URL` setzen; Redirect-URLs für
@@ -311,11 +315,35 @@ vom Stripe-Status. **Ein bestehendes bezahltes Abo wird dadurch nicht
 automatisch gekündigt**; der Betreiber muss es in Stripe beenden und den
 Kunden informieren.
 
-**Bewusster Pilotmodus:** Abozustände werden erfasst, aber sperren bei fehlender
-oder ausgefallener Zahlung noch keine Arbeitszeitbuchungen. So werden bei
-Zahlungs-/Webhook-Problemen keine Arbeitszeiten verloren. Bevor öffentlich
-verkauft wird, müssen Testphase, Zahlungsfristen, Mahnung, Schreibsperren und
-dauerhafter Lese-/Exportzugriff festgelegt und implementiert werden.
+**Testphase und Sperre (automatisch):** Jede neue Firma startet mit 14 Tagen
+Testphase ohne Zahlungsdaten. Danach gilt: aktives Abo (`active`, `trialing`,
+`past_due`) oder Kostenfreigabe ⇒ voller Zugang; sonst ist die Firma
+**nur lesbar** (Rapporte/Exporte bleiben verfügbar). Die Sperre erzwingt ein
+Datenbank-Trigger auf Arbeitszeiten und Abwesenheiten
+(`company_access`/`billing_write_guard`), nicht nur die Oberfläche. Bei
+Zahlungsverzug (`past_due`) bleibt der Zugang bis zum Abo-Ende durch Stripe;
+Mahnregeln in Stripe konfigurieren. Bestehende Firmen erhalten durch die
+Migration 14 Tage ab Migrationszeitpunkt. Hinweise/E-Mail-Erinnerungen für
+gesperrte Firmen werden noch nicht unterdrückt.
+
+## Automatisierung
+
+Neue Firmen registrieren sich selbst unter `/signup`; Testphase, Abo und Sperre
+laufen automatisch (siehe «Stripe einrichten»). Der Betreiber ist nur noch für
+Ausnahmen zuständig (Kostenfreigabe, Support, 2FA-Reset). Die Workflows unter
+`.github\workflows` übernehmen den Betrieb. Einmalig in GitHub unter
+*Settings → Secrets and variables → Actions* anlegen:
+
+| Secret | Zweck |
+| --- | --- |
+| `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD` | `Datenbank-Migrationen`: wendet neue Dateien in `supabase\migrations` bei Änderungen auf `main` an. |
+| `APP_URL`, `CRON_SECRET` | `Rapport-Erinnerungen`: ruft alle 15 Minuten den Worker auf. GitHub kann geplante Läufe verzögern; bei strengen Anforderungen den Hosting-Scheduler verwenden. |
+
+`CI` führt Lint, Typprüfung und Tests bei jedem Pull Request aus. Wurden
+Migrationen bisher von Hand angewendet, vor dem ersten Lauf lokal
+`supabase migration repair --status applied 202610120001 202610120002 202610120003`
+ausführen, damit sie nicht erneut angewendet werden. Die vierte Migration
+anschliessend durch den Workflow oder einmal manuell anwenden.
 
 ## Entwicklung
 
