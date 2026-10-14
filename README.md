@@ -32,8 +32,9 @@ npm run dev
    Projekts; die Migration ist nicht für eine bereits anderweitig genutzte
    Datenbank gedacht.
    Bei einer Neuinstallation anschliessend
-   `202610120002_onboarding_alerts.sql`, `202610120003_flexible_work_models.sql`
-   und `202610120004_self_service_billing.sql` in dieser Reihenfolge ausführen.
+   `202610120002_onboarding_alerts.sql`, `202610120003_flexible_work_models.sql`,
+   `202610120004_self_service_billing.sql` und
+   `202610140001_departments_and_work_rules.sql` in dieser Reihenfolge ausführen.
    **Bestehende Installationen führen nur die noch fehlenden Migrationen
    einmal in Reihenfolge aus**, nicht bereits angewendete wiederholen.
    Spätere Migrationen laufen automatisch (siehe «Automatisierung»).

@@ -26,9 +26,10 @@ type Data = {
   reportSettings: ReportSetting[]; alerts: ReportAlert[]; jobs: EmailJob[];
   holidays: { company_id: string; day: string; label: string }[];
   progress: OnboardingProgress | null; lastChecked: string | null;
+  migrationPending: boolean;
 };
 const empty: Data = { companies: [], departments: [], members: [], workRules: [], projects: [], entries: [], models: [], absences: [], resolutions: [], assignments: [], subscriptions: [], operator: false,
-  reportSettings: [], alerts: [], jobs: [], holidays: [], progress: null, lastChecked: null };
+  reportSettings: [], alerts: [], jobs: [], holidays: [], progress: null, lastChecked: null, migrationPending: false };
 const text = (form: FormData, key: string) => String(form.get(key) ?? "").trim();
 const statusLabel = { pending: "Offen", approved: "Genehmigt", rejected: "Abgelehnt" };
 const roleLabel = { employee: "Mitarbeitende", hr: "HR", admin: "Admin" };
@@ -118,7 +119,23 @@ export default function Dashboard() {
     ]);
     if (progressResult.error) throw new Error(`Neue Datenbankmigration erforderlich: ${progressResult.error.message}`);
     if (scheduler.error) throw new Error(scheduler.error.message);
-    const [members, projects, entries, models, absences, resolutions, assignments, departments, workRules] = await Promise.all([
+    let departments: Department[] = [];
+    let workRules: WorkRule[] = [];
+    let migrationPending = false;
+    try {
+      [departments, workRules] = await Promise.all([
+        allRows((from, to) => db.from("departments").select("*").eq("company_id", selected).order("name").range(from, to)),
+        allRows((from, to) => db.from("work_rules").select("*").eq("company_id", selected).order("priority", { ascending: false }).order("name").range(from, to)),
+      ]);
+    } catch (e: unknown) {
+      const err = e instanceof Error ? e.message : String(e);
+      if (err.includes("schema cache") || err.includes("work_rules") || err.includes("departments") || err.includes("PGRST205")) {
+        migrationPending = true;
+      } else {
+        throw e;
+      }
+    }
+    const [members, projects, entries, models, absences, resolutions, assignments] = await Promise.all([
       allRows((from, to) => db.from("company_members").select("*").eq("company_id", selected).order("user_id").range(from, to)),
       allRows((from, to) => db.from("projects").select("*").eq("company_id", selected).order("name").order("id").range(from, to)),
       allRows((from, to) => db.from("time_entries").select("*").eq("company_id", selected).order("started_at").order("id").range(from, to)),
@@ -126,12 +143,10 @@ export default function Dashboard() {
       allRows((from, to) => db.from("absences").select("*").eq("company_id", selected).order("starts_on").order("id").range(from, to)),
       allRows((from, to) => db.from("break_resolutions").select("*").eq("company_id", selected).order("entry_id").range(from, to)),
       allRows((from, to) => db.from("project_members").select("*").eq("company_id", selected).order("project_id").order("user_id").range(from, to)),
-      allRows((from, to) => db.from("departments").select("*").eq("company_id", selected).order("name").range(from, to)),
-      allRows((from, to) => db.from("work_rules").select("*").eq("company_id", selected).order("priority", { ascending: false }).order("name").range(from, to)),
     ]);
     if (sequence !== loadSequence.current) return;
     setData({ companies, departments, members, workRules, projects, entries, models, absences, resolutions, assignments, subscriptions, operator: operators.length > 0,
-      reportSettings, alerts, jobs, holidays, progress: progressResult.data, lastChecked: scheduler.data?.last_checked_at ?? null });
+      reportSettings, alerts, jobs, holidays, progress: progressResult.data, lastChecked: scheduler.data?.last_checked_at ?? null, migrationPending });
     setLoaded(true);
   }, [companyId, db, router]);
   useEffect(() => {
@@ -350,6 +365,11 @@ export default function Dashboard() {
         </div>}
       </div>
       {message && !panel && !editing && <p role={failed ? "alert" : "status"} className={`notice ${failed ? "error" : ""}`}>{message}</p>}
+      {loaded && data.migrationPending && admin && (
+        <p role="status" className="notice warning">
+          Datenbankmigration ausstehend: Bitte <code>supabase/migrations/202610140001_departments_and_work_rules.sql</code> im Supabase SQL-Editor ausführen, um Abteilungen und Kaskadenregeln zu aktivieren.
+        </p>
+      )}
       {loaded && sub && access === "trial" && trialDaysLeft(sub, now.toJSDate()) <= 7 && <p role="status" className="notice">Deine Testphase endet in {trialDaysLeft(sub, now.toJSDate())} Tagen.{admin ? " Aktiviere unter «Abo» dein Firmenabo, damit die Erfassung weiterläuft." : " Bitte deinen Firmen-Admin, das Abo zu aktivieren."}</p>}
       {loaded && access === "locked" && !data.operator && <p role="alert" className="notice error">Testphase oder Abo beendet: Deine Daten bleiben les- und exportierbar, neue Zeiten können aber nicht erfasst werden.{admin ? " Aktiviere unter «Abo» dein Firmenabo." : " Bitte deinen Firmen-Admin, das Abo zu aktivieren."}</p>}
       {!loaded && !failed && <div className="loading-state" role="status"><span className="loading-dot" /> Daten werden geladen …</div>}
@@ -384,7 +404,9 @@ export default function Dashboard() {
           {running ? (
             <form onSubmit={formAction(async (f) => {
               const reason = text(f, "overrun_reason");
-              const { error } = await db.rpc("check_out", { p_company: companyId, p_overrun_reason: reason || null });
+              const args: { p_company: string; p_overrun_reason?: string | null } = { p_company: companyId };
+              if (reason) args.p_overrun_reason = reason;
+              const { error } = await db.rpc("check_out", args);
               if (error) throw new Error(error.message);
             }, "Ausgecheckt. Die Lücke bis zum nächsten Einchecken zählt als Pause.")}>
               {runningOverrun?.isOverrun && (
@@ -397,7 +419,9 @@ export default function Dashboard() {
           ) : (
             <form onSubmit={formAction(async (f) => {
               const act = text(f, "activity");
-              checked(await db.rpc("check_in", { p_company: companyId, p_project: text(f, "project"), p_activity: act || null }));
+              const args: { p_company: string; p_project: string; p_activity?: string | null } = { p_company: companyId, p_project: text(f, "project") };
+              if (act) args.p_activity = act;
+              checked(await db.rpc("check_in", args));
             }, "Eingecheckt.")}>
               <label>Projekt<select name="project" required defaultValue=""><option value="" disabled>Projekt wählen</option>{assigned.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
               <label>Tätigkeit / Kennzeichnung (optional)
@@ -599,6 +623,11 @@ export default function Dashboard() {
 
       {admin && current === "settings" && <>
         <section className="card"><h2>Firmenregeln und optionale Funktionen</h2>{companyForm}</section>
+        {data.migrationPending && (
+          <p role="alert" className="notice warning">
+            Hinweis: Die Tabellen für Abteilungen und Kaskadenregeln sind noch nicht in Supabase angelegt. Bitte führe <code>supabase/migrations/202610140001_departments_and_work_rules.sql</code> im Supabase SQL-Editor aus.
+          </p>
+        )}
         <section className="card">
           <div className="section-heading"><div><span className="eyebrow">Organisation</span><h2>Abteilungen & Teams</h2></div></div>
           <p className="muted">Gruppiere Mitarbeitende in Abteilungen, um Arbeits- und Schutzregeln gesammelt zuzuweisen.</p>
