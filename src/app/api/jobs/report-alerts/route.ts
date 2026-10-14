@@ -9,7 +9,7 @@ import type { ReportAlert } from "@/lib/types";
 
 export async function POST(request: Request) {
   try {
-    const expected = Buffer.from(`Bearer ${requiredEnv("CRON_SECRET")}`);
+    const expected = Buffer.from('Bearer ' + requiredEnv('CRON_SECRET'));
     const supplied = Buffer.from(request.headers.get("authorization") ?? "");
     if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) throw new HttpError(401, "Scheduler nicht autorisiert.");
     const db = serviceClient();
