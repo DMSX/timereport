@@ -5,7 +5,7 @@ import { DateTime } from "luxon";
 import { useRouter } from "next/navigation";
 import { browserClient } from "@/lib/supabase/browser";
 import { allRows, checked } from "@/lib/query";
-import { breakViolations, correctionDeadline, displayTime, localTime, minutesLabel, modelForDay, monthRange, monthlyReport, vacationUsed, ZONE } from "@/lib/time";
+import { breakViolations, correctionDeadline, displayTime, isValidMonth, localTime, minutesLabel, modelForDay, monthRange, monthlyReport, vacationUsed, ZONE } from "@/lib/time";
 import type { Absence, Company, EmailJob, Entry, Member, OnboardingProgress, Project, ReportAlert, ReportSetting, Resolution, Subscription, WorkModel } from "@/lib/types";
 import { accessState, trialDaysLeft } from "@/lib/access";
 import Modal from "./modal";
@@ -179,7 +179,7 @@ export default function Dashboard() {
   const projectName = (id: string) => data.projects.find((p) => p.id === id)?.name ?? "Archiviertes Projekt";
   const ownEntries = data.entries.filter((e) => e.user_id === userId);
   const ownViolations = breakViolations(ownEntries, now);
-  const report = /^\d{4}-\d{2}$/.test(month) ? monthlyReport(month, entries, models, absences, now) : [];
+  const report = monthlyReport(month, entries, models, absences, now);
   const sub = data.subscriptions.find((s) => s.company_id === companyId);
   const access = accessState(sub, now.toJSDate());
   const range = monthRange(month);
@@ -413,7 +413,7 @@ export default function Dashboard() {
             <button disabled={busy}>Arbeitsblock nachtragen</button>
           </form>
         </Modal>}
-        <div className="section-heading"><h2>Arbeitsblöcke · {person?.display_name}</h2><label>Monat<input type="month" min="2000-01" max="2100-12" value={month} onChange={(e) => { if (e.target.value) setMonth(e.target.value); }} /></label></div>
+        <div className="section-heading"><h2>Arbeitsblöcke · {person?.display_name}</h2><label>Monat<input type="month" min="2000-01" max="2100-12" value={month} onChange={(e) => { if (isValidMonth(e.target.value)) setMonth(e.target.value); }} /></label></div>
         <div className="table-wrap"><table><thead><tr><th>Projekt</th><th>Von</th><th>Bis</th><th>Dauer</th><th>Pause / Korrektur</th></tr></thead><tbody>
           {visibleEntries.slice().reverse().map((e) => {
             const resolved = data.resolutions.find((r) => r.entry_id === e.id);
@@ -446,7 +446,7 @@ export default function Dashboard() {
               <label>Bis<input type="datetime-local" name="end" defaultValue={localTime(editing.ended_at!).toFormat("yyyy-MM-dd'T'HH:mm")} required /></label></div>
             <label>Notiz<input name="note" defaultValue={editing.note} maxLength={1000} /></label>
             <label>Korrekturgrund<input name="reason" minLength={3} maxLength={1000} required /></label>
-            <div className="actions"><button disabled={busy}>Korrektur speichern</button><button type="button" className="secondary" onClick={() => setEditing(null)}>Abbrechen</button></div>
+            <div className="actions"><button disabled={busy}>Korrektur speichern</button><button type="button" className="secondary" disabled={busy} onClick={() => setEditing(null)}>Abbrechen</button></div>
           </form>
         </Modal>}
       </>}

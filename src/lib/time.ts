@@ -9,10 +9,13 @@ export const minutesLabel = (minutes: number) => {
 };
 export const displayTime = (iso: string) => localTime(iso).toFormat("dd.MM.yyyy HH:mm");
 
+export function isValidMonth(month: string) {
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(month) && month >= "2000-01" && month <= "2100-12";
+}
+
 export function monthRange(month: string) {
-  if (!/^\d{4}-\d{2}$/.test(month)) throw new Error("Ungültiger Monat.");
+  if (!isValidMonth(month)) throw new Error("Ungültiger Monat.");
   const start = DateTime.fromISO(`${month}-01`, { zone: ZONE });
-  if (!start.isValid || start.year < 2000 || start.year > 2100) throw new Error("Ungültiger Monat.");
   return { start, end: start.plus({ months: 1 }) };
 }
 
@@ -21,12 +24,20 @@ export function correctionDeadline(start: string, weeks: number) {
 }
 
 export function modelForDay(models: WorkModel[], day: string) {
-  return models.filter((m) => m.valid_from <= day).sort((a, b) => b.valid_from.localeCompare(a.valid_from))[0];
+  let model: WorkModel | undefined;
+  for (const candidate of models) {
+    if (candidate.valid_from <= day && (!model || candidate.valid_from > model.valid_from)) model = candidate;
+  }
+  return model;
 }
 
 export type DayReport = { date: string; worked: number; hasTarget: boolean; mode: WorkModel["mode"] | null; target: number; vacation: number; sick: number; balance: number; vacationDays: number; sickDays: number };
 export function monthlyReport(month: string, entries: Entry[], models: WorkModel[], absences: Absence[], now: DateTime = DateTime.now()) {
   const { start, end } = monthRange(month);
+  const intervals = entries.map((entry) => ({
+    start: localTime(entry.started_at).toMillis(),
+    end: entry.ended_at ? localTime(entry.ended_at).toMillis() : now.toMillis(),
+  })).filter((entry) => entry.start < end.toMillis() && entry.end > start.toMillis());
   const days: DayReport[] = [];
   for (let day = start; day < end; day = day.plus({ days: 1 })) {
     const next = day.plus({ days: 1 });
@@ -34,9 +45,10 @@ export function monthlyReport(month: string, entries: Entry[], models: WorkModel
     const model = modelForDay(models, date);
     const hasTarget = model?.mode === "scheduled";
     const target = hasTarget ? model.weekday_minutes[day.weekday - 1] : 0;
-    const worked = entries.reduce((sum, entry) => {
-      const from = Math.max(localTime(entry.started_at).toMillis(), day.toMillis());
-      const to = Math.min(localTime(entry.ended_at ?? now.toISO()!).toMillis(), next.toMillis());
+    const dayStart = day.toMillis(), dayEnd = next.toMillis();
+    const worked = intervals.reduce((sum, entry) => {
+      const from = Math.max(entry.start, dayStart);
+      const to = Math.min(entry.end, dayEnd);
       return sum + Math.max(0, (to - from) / 60000);
     }, 0);
     const matching = absences.filter((a) => a.status === "approved" && a.starts_on <= date && a.ends_on >= date);

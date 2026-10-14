@@ -139,6 +139,55 @@ test("employee can check in and out without admin clutter", async ({ page }) => 
   await expect(page.getByLabel("Erfassungsgrund", { exact: true })).toBeVisible();
 });
 
+test("history and report reject out-of-range months without crashing", async ({ page }) => {
+  await workspace(page, "employee", true);
+  await page.getByRole("link", { name: "Zeitbuchungen", exact: true }).click();
+  const month = page.getByLabel("Monat", { exact: true });
+  await month.fill("2026-10");
+  for (const invalid of ["1999-12", "2101-01"]) {
+    await month.fill(invalid);
+    await expect(month).toHaveValue("2026-10");
+    await expect(page.getByRole("heading", { name: "Zeitbuchungen", exact: true })).toBeVisible();
+  }
+  await month.fill("2000-01");
+  await expect(month).toHaveValue("2000-01");
+  await page.getByRole("link", { name: "Monatsrapport", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Vorheriger Monat" })).toBeDisabled();
+  await month.fill("2100-12");
+  await expect(page.getByRole("button", { name: "Nächster Monat" })).toBeDisabled();
+  await month.fill("2101-01");
+  await expect(month).toHaveValue("2100-12");
+});
+
+test("correction dialog cannot be dismissed while saving", async ({ page }) => {
+  await workspace(page, "admin", true);
+  await page.route("https://ui-fixture.supabase.co/rest/v1/time_entries?**", (route) => route.fulfill({ json: [{
+    id: "correction", company_id: "company", user_id: "test-user", project_id: "project",
+    started_at: "2026-10-05T08:00:00+02:00", ended_at: "2026-10-05T09:00:00+02:00",
+    note: "", max_work_minutes: 120, min_break_minutes: 15,
+  }] }));
+  await page.reload();
+  await page.getByRole("link", { name: "Zeitbuchungen", exact: true }).click();
+  await page.getByLabel("Monat", { exact: true }).fill("2026-10");
+  await page.getByRole("button", { name: "Korrigieren", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Arbeitsblock korrigieren" });
+  const { promise: pending, resolve: complete } = Promise.withResolvers<void>();
+  await page.route("https://ui-fixture.supabase.co/rest/v1/rpc/correct_entry", async (route) => {
+    await pending;
+    await route.fulfill({ json: null });
+  });
+  await dialog.getByLabel("Korrekturgrund", { exact: true }).fill("Buchung geprüft und korrigiert.");
+  await dialog.getByRole("button", { name: "Korrektur speichern", exact: true }).click();
+  try {
+    await expect(dialog.getByRole("button", { name: "Abbrechen", exact: true })).toBeDisabled();
+    await expect(dialog.getByRole("button", { name: "Dialog schliessen" })).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeVisible();
+  } finally { complete(); }
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("status")).toHaveText("Korrektur gespeichert.");
+});
+
 test("operator without company gets a guided first step", async ({ page }) => {
   await workspace(page, "operator");
   await expect(page.getByRole("heading", { name: "Deine erste Firma. Ein klarer Start." })).toBeVisible();

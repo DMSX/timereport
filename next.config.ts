@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  distDir: process.env.NEXT_UI_TEST === "1" ? ".next-ui" : ".next",
   cacheComponents: true,
   partialPrefetching: true,
   async headers() {

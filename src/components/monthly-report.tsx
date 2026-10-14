@@ -3,7 +3,7 @@
 import { Fragment, useState } from "react";
 import { DateTime } from "luxon";
 import type { Absence, Entry, Project } from "@/lib/types";
-import { displayTime, localTime, minutesLabel, monthRange, type DayReport, ZONE } from "@/lib/time";
+import { displayTime, isValidMonth, localTime, minutesLabel, monthRange, type DayReport, ZONE } from "@/lib/time";
 import { entryMinutesInRange, projectOverview } from "@/lib/report-overview";
 
 export default function MonthlyReport({ month, onMonth, name, companyName, companyId, userId, report, entries, projects, absences, showAbsences, now }: {
@@ -40,7 +40,7 @@ export default function MonthlyReport({ month, onMonth, name, companyName, compa
       <div className="report-tools"><div className="report-month-controls">
         <button className="secondary" aria-label="Vorheriger Monat" disabled={month === "2000-01"} onClick={() => moveMonth(-1)}>‹</button>
         <label>Monat<input type="month" value={month} min="2000-01" max="2100-12" onChange={(event) => {
-          if (/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value) && event.target.value >= "2000-01" && event.target.value <= "2100-12") {
+          if (isValidMonth(event.target.value)) {
             setExpanded(null); onMonth(event.target.value);
           }
         }} /></label>
