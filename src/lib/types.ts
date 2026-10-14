@@ -4,17 +4,32 @@ export type Company = {
   max_work_minutes: number; min_break_minutes: number;
   absence_tracking: boolean; report_alerts_enabled: boolean;
 };
+export type Department = {
+  id: string; company_id: string; name: string; created_at: string;
+};
 export type Member = {
   company_id: string; user_id: string; display_name: string; role: Role; vacation_days: number;
+  department_id?: string | null;
 };
 export type Project = {
   id: string; company_id: string; name: string; active: boolean;
   max_work_minutes: number | null; min_break_minutes: number | null;
 };
+export type RuleScope = "company" | "department" | "member";
+export type WorkRule = {
+  id: string; company_id: string; name: string; scope: RuleScope;
+  department_id: string | null; user_id: string | null;
+  activity_tag: string | null;
+  max_work_minutes: number; min_break_minutes: number;
+  allow_overrun: boolean; overrun_note_required: boolean;
+  priority: number; valid_from: string; valid_to: string | null;
+  is_active: boolean; created_at: string;
+};
 export type Entry = {
   id: string; company_id: string; user_id: string; project_id: string;
   started_at: string; ended_at: string | null; note: string;
   max_work_minutes: number; min_break_minutes: number;
+  activity_tag?: string | null; rule_id?: string | null; overrun_reason?: string | null;
 };
 export type WorkModel = {
   id: string; company_id: string; user_id: string; valid_from: string;
@@ -51,7 +66,9 @@ export type Database = {
   public: {
     Tables: {
       companies: Table<Company, "name">;
+      departments: Table<Department, "company_id" | "name">;
       company_members: Table<Member, "company_id" | "user_id" | "display_name">;
+      work_rules: Table<WorkRule, "company_id" | "name" | "scope" | "max_work_minutes" | "min_break_minutes">;
       operators: Table<{ user_id: string }, "user_id">;
       subscriptions: Table<Subscription, "company_id">;
       projects: Table<Project, "company_id" | "name">;
@@ -70,9 +87,9 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
-      check_in: { Args: { p_company: string; p_project: string }; Returns: string };
-      check_out: { Args: { p_company: string }; Returns: undefined };
-      record_entry: { Args: { p_company: string; p_user: string; p_project: string; p_start: string; p_end: string; p_note: string; p_reason: string }; Returns: string };
+      check_in: { Args: { p_company: string; p_project: string; p_activity?: string | null }; Returns: string };
+      check_out: { Args: { p_company: string; p_overrun_reason?: string | null }; Returns: undefined };
+      record_entry: { Args: { p_company: string; p_user: string; p_project: string; p_start: string; p_end: string; p_note: string; p_reason: string; p_activity?: string | null; p_overrun_reason?: string | null }; Returns: string };
       correct_entry: { Args: { p_entry: string; p_project: string; p_start: string; p_end: string; p_note: string; p_reason: string }; Returns: undefined };
       request_absence: { Args: { p_company: string; p_kind: string; p_start: string; p_end: string; p_fraction: number; p_part?: string | null }; Returns: string };
       review_absence: { Args: { p_absence: string; p_status: string; p_reason: string }; Returns: undefined };
