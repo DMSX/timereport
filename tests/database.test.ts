@@ -26,6 +26,7 @@ test("PostgreSQL migration and tenant/write boundaries", async (t) => {
     await db.exec(await readFile(new URL("../supabase/migrations/202610120001_initial.sql", import.meta.url), "utf8"));
     await db.exec(await readFile(new URL("../supabase/migrations/202610120002_onboarding_alerts.sql", import.meta.url), "utf8"));
     await db.exec(await readFile(new URL("../supabase/migrations/202610120003_flexible_work_models.sql", import.meta.url), "utf8"));
+    await db.exec(await readFile(new URL("../supabase/migrations/202610140001_departments_and_work_rules.sql", import.meta.url), "utf8"));
     await db.exec(`
       insert into auth.users values ('${admin}'),('${employee}'),('${outsider}'),('${operator}');
       insert into public.companies(id,name,absence_tracking) values ('${company}','Pilot',true),('${otherCompany}','Other',true);
@@ -177,6 +178,91 @@ test("PostgreSQL migration and tenant/write boundaries", async (t) => {
       assert.equal((await asUser(operator, "select * from subscriptions")).length, 2);
       assert.equal((await asUser(operator, "select * from time_entries")).length, 0);
       assert.equal((await asUser(operator, "select * from company_members")).length, 0);
+    });
+    await t.test("departments and cascading work rules cascade company -> department -> member", async () => {
+      // 1. Create department as admin
+      const dept = (await asUser<{ id: string }>(admin,
+        "insert into departments(company_id, name) values($1, 'Produktion Reinraum') returning id",
+        [company]
+      ))[0].id;
+      // Employee can see department but cannot insert
+      assert.equal((await asUser(employee, "select * from departments where id=$1", [dept])).length, 1);
+      await assert.rejects(asUser(employee, "insert into departments(company_id, name) values($1, 'Hacker')", [company]), /row-level security policy/);
+
+      // Assign employee to department
+      await asUser(admin, "update company_members set department_id=$1 where company_id=$2 and user_id=$3", [dept, company, employee]);
+
+      // 2. Define rules:
+      // Company-level default rule (e.g. 540 min max, 30 min break)
+      await asUser(admin,
+        `insert into work_rules(company_id, name, scope, max_work_minutes, min_break_minutes, allow_overrun)
+         values($1, 'Standard Firma', 'company', 540, 30, true)`,
+        [company]
+      );
+
+      // Department-level rule (e.g. 480 min max, 45 min break)
+      await asUser(admin,
+        `insert into work_rules(company_id, name, scope, department_id, max_work_minutes, min_break_minutes, allow_overrun)
+         values($1, 'Produktion Standard', 'department', $2, 480, 45, true)`,
+        [company, dept]
+      );
+
+      // Activity-specific rule: Schutzanzug (e.g. max 120 min, 15 min break)
+      await asUser(admin,
+        `insert into work_rules(company_id, name, scope, activity_tag, max_work_minutes, min_break_minutes, allow_overrun, overrun_note_required)
+         values($1, 'Schutzanzug Einsatz', 'company', 'schutzanzug', 120, 15, true, true)`,
+        [company]
+      );
+
+      // Member exception rule: Employee has special exemption for Schutzanzug (e.g. 150 min, allow_overrun = true)
+      const memberRule = (await asUser<{ id: string }>(admin,
+        `insert into work_rules(company_id, name, scope, user_id, activity_tag, max_work_minutes, min_break_minutes, allow_overrun)
+         values($1, 'Ausnahme Max Muster Schutzanzug', 'member', $2, 'schutzanzug', 150, 20, true) returning id`,
+        [company, employee]
+      ))[0].id;
+
+      // Test resolve_work_rule for generic work (Department rule 480 mins wins over company 540 mins)
+      const genericResolved = await asUser<{ max_work_minutes: number; matched_scope: string }>(
+        employee,
+        "select max_work_minutes, matched_scope from resolve_work_rule($1, $2, null)",
+        [company, employee]
+      );
+      assert.equal(genericResolved[0].max_work_minutes, 480);
+      assert.equal(genericResolved[0].matched_scope, "department");
+
+      // Test resolve_work_rule with activity 'schutzanzug' (Member exception 150 mins wins over company activity rule 120 mins)
+      const suitResolved = await asUser<{ rule_id: string; max_work_minutes: number; matched_scope: string }>(
+        employee,
+        "select rule_id, max_work_minutes, matched_scope from resolve_work_rule($1, $2, 'schutzanzug')",
+        [company, employee]
+      );
+      assert.equal(suitResolved[0].rule_id, memberRule);
+      assert.equal(suitResolved[0].max_work_minutes, 150);
+      assert.equal(suitResolved[0].matched_scope, "member");
+
+      // Check-in with activity tag snapshots the resolved rule limit
+      const entryId = (await asUser<{ check_in: string }>(
+        employee,
+        "select check_in($1, $2, 'schutzanzug')",
+        [company, project]
+      ))[0].check_in;
+
+      const checkedInEntry = (await asUser<{ max_work_minutes: number; activity_tag: string }>(
+        employee,
+        "select max_work_minutes, activity_tag from time_entries where id=$1",
+        [entryId]
+      ))[0];
+      assert.equal(checkedInEntry.max_work_minutes, 150);
+      assert.equal(checkedInEntry.activity_tag, "schutzanzug");
+
+      // Check-out with overrun note
+      await asUser(employee, "select check_out($1, 'Wartungszyklus durfte nicht unterbrochen werden')", [company]);
+      const checkedOutEntry = (await asUser<{ overrun_reason: string }>(
+        employee,
+        "select overrun_reason from time_entries where id=$1",
+        [entryId]
+      ))[0];
+      assert.equal(checkedOutEntry.overrun_reason, "Wartungszyklus durfte nicht unterbrochen werden");
     });
   } finally { await db.close(); }
 });
